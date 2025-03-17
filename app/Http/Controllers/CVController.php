@@ -63,10 +63,17 @@ Return each field on its own line. If missing, write 'Not specified'.\n" . $cvCo
             ]);
 
         } catch (\Exception $e) {
+            $errorMessage = config('app.debug')
+                ? 'API Error: ' . $e->getMessage()
+                : 'Internal server error. Please try again later.';
             return response()->json([
                 'success' => false,
-                'message' => 'Internal server error. Please try again later.',
-                'errors' => null
+                'message' => $errorMessage,
+                'errors' => config('app.debug') ? [
+                    'exception' => get_class($e),
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine()
+                ] : null
             ], 500);
         }
     }
