@@ -42,7 +42,7 @@ class CVController extends Controller
 - Technical Skills: [Comma-separated list]
 - Languages: [Language (Proficiency)]
 - Social Media Accounts: [Platform: URL]
-Return each field on its own line. If missing, write 'Not specified'.\n" . $cvContent;
+Return each field on its own line.\n" . $cvContent;
 
             $response = GeminiAi::generateText($prompt, [
                 'model' => 'gemini-1.5-pro',
@@ -81,16 +81,16 @@ Return each field on its own line. If missing, write 'Not specified'.\n" . $cvCo
     private function parseResponseText(string $text): array
     {
         $result = [
-            'name' => 'Not specified',
-            'Birthday' => 'Not specified',
-            'Job Title' => 'Not specified',
-            'Education' => 'Not specified',
-            'Experience' => 'Not specified',
-            'Internships' => 'Not specified',
-            'Projects' => 'Not specified',
-            'Technical Skills' => 'Not specified',
-            'Languages' => 'Not specified',
-            'Social Media Accounts' => 'Not specified'
+            'name' => null,
+            'Birthday' => null,
+            'Job Title' => null,
+            'Education' => null,
+            'Experience' => null,
+            'Internships' => null,
+            'Projects' => null,
+            'Technical Skills' => null,
+            'Languages' => null,
+            'Social Media Accounts' => null
         ];
 
         $lines = explode("\n", trim($text));
@@ -107,7 +107,7 @@ Return each field on its own line. If missing, write 'Not specified'.\n" . $cvCo
                 $mappedField = $this->mapFieldName($fieldName);
                 if ($mappedField && array_key_exists($mappedField, $result)) {
                     $currentField = $mappedField;
-                    $result[$currentField] = $value !== '' ? $value : 'Not specified';
+                    $result[$currentField] = $value !== '' ? $value : null;
                 }
             } elseif ($currentField) {
                 // Append to current field if it's a continuation line
@@ -115,10 +115,11 @@ Return each field on its own line. If missing, write 'Not specified'.\n" . $cvCo
             }
         }
 
-        // Cleanup and format specific fields
-        $result['Technical Skills'] = $this->formatList($result['Technical Skills']);
-        $result['Languages'] = $this->formatList($result['Languages']);
-        $result['Social Media Accounts'] = $this->formatSocialMedia($result['Social Media Accounts']);
+        // Cleanup and format specific fields as arrays or null if not specified
+        $result['Technical Skills'] = $this->formatListAsArray($result['Technical Skills']);
+        $result['Experience'] = $this->formatListAsArray($result['Experience']);
+        $result['Social Media Accounts'] = $this->formatSocialMediaAsArray($result['Social Media Accounts']);
+        $result['Languages'] = $this->formatListAsArray($result['Languages']);
 
         return $result;
     }
@@ -142,22 +143,37 @@ Return each field on its own line. If missing, write 'Not specified'.\n" . $cvCo
         return $fieldMap[$lower] ?? null;
     }
 
-    private function formatList(string $input): string
+    private function formatList(?string $input): ?string
     {
-        if ($input === 'Not specified') return $input;
+        if ($input === null) return null;
 
-        // Convert both comma and newline separators to comma-separated list
+        // Convert both comma and newline separators to a comma-separated list
         $items = preg_split('/[\n,;]+/', $input);
         $filtered = array_filter(array_map('trim', $items));
-        return implode(', ', $filtered);
+        return !empty($filtered) ? implode(', ', $filtered) : null;
     }
 
-    private function formatSocialMedia(string $input): string
+    private function formatListAsArray(?string $input): ?array
     {
-        if ($input === 'Not specified') return $input;
+        if ($input === null) {
+            return null;
+        }
 
-        // Convert to platform: URL format
+        // Convert both comma, newline, and semicolon separators to an array
+        $items = preg_split('/[\n,;]+/', $input);
+        $filtered = array_filter(array_map('trim', $items));
+        return !empty($filtered) ? array_values($filtered) : null;
+    }
+
+    private function formatSocialMediaAsArray(?string $input): ?array
+    {
+        if ($input === null) {
+            return null;
+        }
+
+        // Convert to an array splitting by newlines
         $accounts = preg_split('/\n+/', $input);
-        return implode(', ', array_map('trim', $accounts));
+        $filtered = array_filter(array_map('trim', $accounts));
+        return !empty($filtered) ? array_values($filtered) : null;
     }
 }
