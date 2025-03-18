@@ -31,17 +31,18 @@ class CVController extends Controller
             $cvContent = $pdf->getText();
             Storage::delete($path);
 
-            // Updated prompt for a structured output
+            // Updated prompt: structured output with rephrasing and clear separation.
             $prompt = "Extract these fields strictly in the following format:
 Full Name: <name>
-Summary: <summary>
+Summary: <summary> (if not provided, leave blank)
 Contact: Email: <email>, Phone: <phone>, City: <city>
 Education: <degree> | <institution> | <startingYear> | <graduationYear> (if multiple, separate entries with a newline)
 Experience: <position> | <company> | <duration> | <description> (if multiple, separate entries with a newline)
 Projects: <title> | <description> (if multiple, separate entries with a newline)
-Technical Skills: <comma-separated list>
-Languages: <comma-separated list>
+Technical Skills: <comma-separated list of programming languages and technical skills>
+Languages: <comma-separated list of spoken languages>
 Social Media Accounts: <platform>: <url> (if multiple, separate entries with a newline)
+Rephrase and clarify the extracted information to be clearer and more suitable, while maintaining the original content without adding any new information.
 Return each field on its own line.\n" . $cvContent;
 
             $response = GeminiAi::generateText($prompt, [
@@ -55,6 +56,32 @@ Return each field on its own line.\n" . $cvContent;
 
             $responseText = $response['candidates'][0]['content']['parts'][0]['text'];
             $parsedData = $this->parseResponseText($responseText);
+
+            // Separate spoken languages from programming languages.
+            $parsedData = $this->separateLanguages($parsedData);
+
+            // If summary is missing, generate one from available info.
+            if (empty($parsedData['summary'])) {
+                $summaryData = "Full Name: " . ($parsedData['name'] ?? '') . "\n" .
+                               "Contact: " . json_encode($parsedData['contact']) . "\n" .
+                               "Education: " . json_encode($parsedData['education']) . "\n" .
+                               "Experience: " . json_encode($parsedData['experience']) . "\n" .
+                               "Projects: " . json_encode($parsedData['projects']) . "\n" .
+                               "Technical Skills: " . (is_array($parsedData['technicalSkills']) ? implode(', ', $parsedData['technicalSkills']) : '') . "\n" .
+                               "Languages: " . (is_array($parsedData['languages']) ? implode(', ', $parsedData['languages']) : '') . "\n";
+
+                $summaryPrompt = "Based on the following resume information, generate a concise summary that rephrases the content clearly and suitably without adding new information:\n" . $summaryData;
+                $summaryResponse = GeminiAi::generateText($summaryPrompt, [
+                    'model' => 'gemini-1.5-pro',
+                    'raw' => true,
+                    'generationConfig' => [
+                        'temperature' => 0.7,
+                        'maxOutputTokens' => 150
+                    ]
+                ]);
+                $summaryText = $summaryResponse['candidates'][0]['content']['parts'][0]['text'] ?? null;
+                $parsedData['summary'] = trim($summaryText) !== '' ? $summaryText : null;
+            }
 
             return response()->json([
                 'success' => true,
@@ -80,7 +107,7 @@ Return each field on its own line.\n" . $cvContent;
 
     private function parseResponseText(string $text): array
     {
-        // Initialize with the new structure
+        // Initialize with the new structure.
         $result = [
             'name' => null,
             'summary' => null,
@@ -101,19 +128,18 @@ Return each field on its own line.\n" . $cvContent;
             if (preg_match('/^(.*?):\s*(.*)/', $cleanLine, $matches)) {
                 $fieldName = strtolower(trim($matches[1]));
                 $value = trim($matches[2]);
-
                 $mappedField = $this->mapFieldName($fieldName);
                 if ($mappedField && array_key_exists($mappedField, $result)) {
                     $currentField = $mappedField;
                     $result[$currentField] = $value !== '' ? $value : null;
                 }
             } elseif ($currentField) {
-                // Append additional lines for multi-line values
+                // Append additional lines for multi-line values.
                 $result[$currentField] .= "\n" . $cleanLine;
             }
         }
 
-        // Format the structured fields
+        // Format the structured fields.
         $result['contact'] = $this->formatContact($result['contact']);
         $result['education'] = $this->formatEducation($result['education']);
         $result['experience'] = $this->formatExperience($result['experience']);
@@ -148,7 +174,7 @@ Return each field on its own line.\n" . $cvContent;
         if ($input === null) {
             return null;
         }
-        // Split by comma (or semicolon/newline) and filter empty values
+        // Split by commas, semicolons, or newlines and filter out empty values.
         $items = preg_split('/[\n,;]+/', $input);
         $filtered = array_filter(array_map('trim', $items));
         return !empty($filtered) ? array_values($filtered) : null;
@@ -179,7 +205,7 @@ Return each field on its own line.\n" . $cvContent;
         if ($input === null) {
             return null;
         }
-        // Each education entry should be on a new line; fields are separated by "|"
+        // Each education entry is expected on a new line; fields separated by "|"
         $lines = preg_split('/\n+/', $input);
         $educations = [];
         foreach ($lines as $line) {
@@ -201,7 +227,7 @@ Return each field on its own line.\n" . $cvContent;
         if ($input === null) {
             return null;
         }
-        // Each experience entry on a new line; fields are separated by "|"
+        // Each experience entry on a new line; fields separated by "|"
         $lines = preg_split('/\n+/', $input);
         $experiences = [];
         foreach ($lines as $line) {
@@ -223,7 +249,7 @@ Return each field on its own line.\n" . $cvContent;
         if ($input === null) {
             return null;
         }
-        // Each project entry on a new line; fields are separated by "|"
+        // Each project entry on a new line; fields separated by "|"
         $lines = preg_split('/\n+/', $input);
         $projects = [];
         foreach ($lines as $line) {
@@ -256,5 +282,41 @@ Return each field on its own line.\n" . $cvContent;
             }
         }
         return !empty($socialMedia) ? $socialMedia : null;
+    }
+
+    /**
+     * Separates spoken languages from programming languages.
+     * Spoken languages remain in the 'languages' field,
+     * while any common programming languages found are added to 'technicalSkills'.
+     */
+    private function separateLanguages(array $result): array
+    {
+        $commonProgrammingLanguages = [
+            'python', 'java', 'c++', 'c#', 'php', 'javascript', 
+            'typescript', 'ruby', 'go', 'swift', 'kotlin', 'perl', 
+            'r', 'scala', 'objective-c', 'html', 'css'
+        ];
+
+        if (isset($result['languages']) && is_array($result['languages'])) {
+            $spoken = [];
+            $programming = [];
+            foreach ($result['languages'] as $lang) {
+                $lower = strtolower($lang);
+                if (in_array($lower, $commonProgrammingLanguages)) {
+                    $programming[] = $lang;
+                } else {
+                    $spoken[] = $lang;
+                }
+            }
+            $result['languages'] = !empty($spoken) ? array_values(array_unique($spoken)) : null;
+            if (isset($result['technicalSkills']) && is_array($result['technicalSkills'])) {
+                $merged = array_merge($result['technicalSkills'], $programming);
+                $result['technicalSkills'] = array_values(array_unique($merged));
+            } else if (!empty($programming)) {
+                $result['technicalSkills'] = array_values(array_unique($programming));
+            }
+        }
+
+        return $result;
     }
 }
