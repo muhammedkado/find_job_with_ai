@@ -31,17 +31,17 @@ class CVController extends Controller
             $cvContent = $pdf->getText();
             Storage::delete($path);
 
-            $prompt = "Extract these fields strictly:
-- Full Name: [First Middle Last]
-- Birthday: [DD/MM/YYYY]
-- Job Title: [Title]
-- Education: [Degree, Institution, Year]
-- Experience: [Position, Company, Duration]
-- Internships: [Role, Company, Duration]
-- Projects: [Project Name: Description]
-- Technical Skills: [Comma-separated list]
-- Languages: [Language (Proficiency)]
-- Social Media Accounts: [Platform: URL]
+            // Updated prompt for a structured output
+            $prompt = "Extract these fields strictly in the following format:
+Full Name: <name>
+Summary: <summary>
+Contact: Email: <email>, Phone: <phone>, City: <city>
+Education: <degree> | <institution> | <startingYear> | <graduationYear> (if multiple, separate entries with a newline)
+Experience: <position> | <company> | <duration> | <description> (if multiple, separate entries with a newline)
+Projects: <title> | <description> (if multiple, separate entries with a newline)
+Technical Skills: <comma-separated list>
+Languages: <comma-separated list>
+Social Media Accounts: <platform>: <url> (if multiple, separate entries with a newline)
 Return each field on its own line.\n" . $cvContent;
 
             $response = GeminiAi::generateText($prompt, [
@@ -80,17 +80,17 @@ Return each field on its own line.\n" . $cvContent;
 
     private function parseResponseText(string $text): array
     {
+        // Initialize with the new structure
         $result = [
             'name' => null,
-            'Birthday' => null,
-            'Job Title' => null,
-            'Education' => null,
-            'Experience' => null,
-            'Internships' => null,
-            'Projects' => null,
-            'Technical Skills' => null,
-            'Languages' => null,
-            'Social Media Accounts' => null
+            'summary' => null,
+            'contact' => null,
+            'education' => null,
+            'experience' => null,
+            'projects' => null,
+            'technicalSkills' => null,
+            'languages' => null,
+            'socialMediaAccounts' => null
         ];
 
         $lines = explode("\n", trim($text));
@@ -98,8 +98,6 @@ Return each field on its own line.\n" . $cvContent;
 
         foreach ($lines as $line) {
             $cleanLine = preg_replace('/^-\s*/', '', trim($line));
-
-            // Check for field header
             if (preg_match('/^(.*?):\s*(.*)/', $cleanLine, $matches)) {
                 $fieldName = strtolower(trim($matches[1]));
                 $value = trim($matches[2]);
@@ -110,16 +108,19 @@ Return each field on its own line.\n" . $cvContent;
                     $result[$currentField] = $value !== '' ? $value : null;
                 }
             } elseif ($currentField) {
-                // Append to current field if it's a continuation line
+                // Append additional lines for multi-line values
                 $result[$currentField] .= "\n" . $cleanLine;
             }
         }
 
-        // Cleanup and format specific fields as arrays or null if not specified
-        $result['Technical Skills'] = $this->formatListAsArray($result['Technical Skills']);
-        $result['Experience'] = $this->formatListAsArray($result['Experience']);
-        $result['Social Media Accounts'] = $this->formatSocialMediaAsArray($result['Social Media Accounts']);
-        $result['Languages'] = $this->formatListAsArray($result['Languages']);
+        // Format the structured fields
+        $result['contact'] = $this->formatContact($result['contact']);
+        $result['education'] = $this->formatEducation($result['education']);
+        $result['experience'] = $this->formatExperience($result['experience']);
+        $result['projects'] = $this->formatProjects($result['projects']);
+        $result['technicalSkills'] = $this->formatListAsArray($result['technicalSkills']);
+        $result['languages'] = $this->formatListAsArray($result['languages']);
+        $result['socialMediaAccounts'] = $this->formatSocialMediaObject($result['socialMediaAccounts']);
 
         return $result;
     }
@@ -128,29 +129,18 @@ Return each field on its own line.\n" . $cvContent;
     {
         $fieldMap = [
             'full name' => 'name',
-            'birthday' => 'Birthday',
-            'job title' => 'Job Title',
-            'education' => 'Education',
-            'experience' => 'Experience',
-            'internships' => 'Internships',
-            'projects' => 'Projects',
-            'technical skills' => 'Technical Skills',
-            'languages' => 'Languages',
-            'social media accounts' => 'Social Media Accounts'
+            'summary' => 'summary',
+            'contact' => 'contact',
+            'education' => 'education',
+            'experience' => 'experience',
+            'projects' => 'projects',
+            'technical skills' => 'technicalSkills',
+            'languages' => 'languages',
+            'social media accounts' => 'socialMediaAccounts'
         ];
 
         $lower = strtolower($rawName);
         return $fieldMap[$lower] ?? null;
-    }
-
-    private function formatList(?string $input): ?string
-    {
-        if ($input === null) return null;
-
-        // Convert both comma and newline separators to a comma-separated list
-        $items = preg_split('/[\n,;]+/', $input);
-        $filtered = array_filter(array_map('trim', $items));
-        return !empty($filtered) ? implode(', ', $filtered) : null;
     }
 
     private function formatListAsArray(?string $input): ?array
@@ -158,22 +148,113 @@ Return each field on its own line.\n" . $cvContent;
         if ($input === null) {
             return null;
         }
-
-        // Convert both comma, newline, and semicolon separators to an array
+        // Split by comma (or semicolon/newline) and filter empty values
         $items = preg_split('/[\n,;]+/', $input);
         $filtered = array_filter(array_map('trim', $items));
         return !empty($filtered) ? array_values($filtered) : null;
     }
 
-    private function formatSocialMediaAsArray(?string $input): ?array
+    private function formatContact(?string $input): ?array
     {
         if ($input === null) {
             return null;
         }
+        // Expected format: "Email: <email>, Phone: <phone>, City: <city>"
+        $parts = preg_split('/[,;]+/', $input);
+        $contact = [];
+        foreach ($parts as $part) {
+            if (preg_match('/email\s*:\s*(.*)/i', $part, $matches)) {
+                $contact['email'] = trim($matches[1]);
+            } elseif (preg_match('/phone\s*:\s*(.*)/i', $part, $matches)) {
+                $contact['phone'] = trim($matches[1]);
+            } elseif (preg_match('/city\s*:\s*(.*)/i', $part, $matches)) {
+                $contact['city'] = trim($matches[1]);
+            }
+        }
+        return !empty($contact) ? $contact : null;
+    }
 
-        // Convert to an array splitting by newlines
-        $accounts = preg_split('/\n+/', $input);
-        $filtered = array_filter(array_map('trim', $accounts));
-        return !empty($filtered) ? array_values($filtered) : null;
+    private function formatEducation(?string $input): ?array
+    {
+        if ($input === null) {
+            return null;
+        }
+        // Each education entry should be on a new line; fields are separated by "|"
+        $lines = preg_split('/\n+/', $input);
+        $educations = [];
+        foreach ($lines as $line) {
+            $parts = array_map('trim', explode('|', $line));
+            if (count($parts) >= 4) {
+                $educations[] = [
+                    'degree' => $parts[0],
+                    'institution' => $parts[1],
+                    'startingYear' => $parts[2],
+                    'graduationYear' => $parts[3]
+                ];
+            }
+        }
+        return !empty($educations) ? $educations : null;
+    }
+
+    private function formatExperience(?string $input): ?array
+    {
+        if ($input === null) {
+            return null;
+        }
+        // Each experience entry on a new line; fields are separated by "|"
+        $lines = preg_split('/\n+/', $input);
+        $experiences = [];
+        foreach ($lines as $line) {
+            $parts = array_map('trim', explode('|', $line));
+            if (count($parts) >= 4) {
+                $experiences[] = [
+                    'position' => $parts[0],
+                    'company' => $parts[1],
+                    'duration' => $parts[2],
+                    'description' => $parts[3]
+                ];
+            }
+        }
+        return !empty($experiences) ? $experiences : null;
+    }
+
+    private function formatProjects(?string $input): ?array
+    {
+        if ($input === null) {
+            return null;
+        }
+        // Each project entry on a new line; fields are separated by "|"
+        $lines = preg_split('/\n+/', $input);
+        $projects = [];
+        foreach ($lines as $line) {
+            $parts = array_map('trim', explode('|', $line));
+            if (count($parts) >= 2) {
+                $projects[] = [
+                    'title' => $parts[0],
+                    'description' => $parts[1]
+                ];
+            }
+        }
+        return !empty($projects) ? $projects : null;
+    }
+
+    private function formatSocialMediaObject(?string $input): ?array
+    {
+        if ($input === null) {
+            return null;
+        }
+        // Each social media entry on a new line; expected format: "Platform: URL"
+        $lines = preg_split('/\n+/', $input);
+        $socialMedia = [];
+        foreach ($lines as $line) {
+            if (preg_match('/^(.*?):\s*(.*)/', $line, $matches)) {
+                $platform = trim($matches[1]);
+                $url = trim($matches[2]);
+                if ($platform && $url) {
+                    $socialMedia[$platform] = $url;
+                }
+            }
+        }
+        return !empty($socialMedia) ? $socialMedia : null;
     }
 }
