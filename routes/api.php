@@ -3,6 +3,7 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\CVController;
+use App\Http\Controllers\JobSearchController;
 
 
 /*
@@ -23,6 +24,6 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 
 Route::post('/analyze-cv', [CVController::class, 'analyze']);
 
-
+Route::get('/jobsearch', [JobSearchController::class, 'searchJobs']);
 
 

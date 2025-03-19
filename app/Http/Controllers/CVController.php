@@ -31,7 +31,7 @@ class CVController extends Controller
             $cvContent = $pdf->getText();
             Storage::delete($path);
 
-            // Updated prompt: structured output with rephrasing and clear separation.
+            // ATS-optimized extraction prompt with structured output and rephrasing.
             $prompt = "Extract these fields strictly in the following format:
 Full Name: <name>
 Summary: <summary> (if not provided, leave blank)
@@ -42,7 +42,7 @@ Projects: <title> | <description> (if multiple, separate entries with a newline)
 Technical Skills: <comma-separated list of programming languages and technical skills>
 Languages: <comma-separated list of spoken languages>
 Social Media Accounts: <platform>: <url> (if multiple, separate entries with a newline)
-Rephrase and clarify the extracted information to be clearer and more suitable, while maintaining the original content without adding any new information.
+Rephrase and clarify the extracted information to be clearer and more suitable for ATS screening, while maintaining the original content without adding any new information.
 Return each field on its own line.\n" . $cvContent;
 
             $response = GeminiAi::generateText($prompt, [
@@ -60,17 +60,18 @@ Return each field on its own line.\n" . $cvContent;
             // Separate spoken languages from programming languages.
             $parsedData = $this->separateLanguages($parsedData);
 
-            // If summary is missing, generate one from available info.
+            // Generate or rephrase the summary to be ATS-optimized in first-person.
             if (empty($parsedData['summary'])) {
+                // Create summary from available fields.
                 $summaryData = "Full Name: " . ($parsedData['name'] ?? '') . "\n" .
-                               "Contact: " . json_encode($parsedData['contact']) . "\n" .
-                               "Education: " . json_encode($parsedData['education']) . "\n" .
-                               "Experience: " . json_encode($parsedData['experience']) . "\n" .
-                               "Projects: " . json_encode($parsedData['projects']) . "\n" .
-                               "Technical Skills: " . (is_array($parsedData['technicalSkills']) ? implode(', ', $parsedData['technicalSkills']) : '') . "\n" .
-                               "Languages: " . (is_array($parsedData['languages']) ? implode(', ', $parsedData['languages']) : '') . "\n";
+                    "Contact: " . json_encode($parsedData['contact']) . "\n" .
+                    "Education: " . json_encode($parsedData['education']) . "\n" .
+                    "Experience: " . json_encode($parsedData['experience']) . "\n" .
+                    "Projects: " . json_encode($parsedData['projects']) . "\n" .
+                    "Technical Skills: " . (is_array($parsedData['technicalSkills']) ? implode(', ', $parsedData['technicalSkills']) : '') . "\n" .
+                    "Languages: " . (is_array($parsedData['languages']) ? implode(', ', $parsedData['languages']) : '');
 
-                $summaryPrompt = "Based on the following resume information, generate a concise summary that rephrases the content clearly and suitably without adding new information:\n" . $summaryData;
+                $summaryPrompt = "Reword and refine the following summary to be clear, concise, and optimized for the Applicant Tracking System (ATS), focusing on my key role and experience, and considering my graduation date. Don't say I am currently studying if my graduation date has passed. Keep the original meaning without adding new details, and don't list all skills. Write in the first person (using \"I\" statements, not \"he\" statements). " . $summaryData;
                 $summaryResponse = GeminiAi::generateText($summaryPrompt, [
                     'model' => 'gemini-1.5-pro',
                     'raw' => true,
@@ -81,6 +82,19 @@ Return each field on its own line.\n" . $cvContent;
                 ]);
                 $summaryText = $summaryResponse['candidates'][0]['content']['parts'][0]['text'] ?? null;
                 $parsedData['summary'] = trim($summaryText) !== '' ? $summaryText : null;
+            } else {
+                // Rephrase existing summary for ATS optimization.
+                $summaryPrompt = "Reword and refine the following summary to be clear, concise, and optimized for the Applicant Tracking System (ATS), focusing on my key role and experience, and considering my graduation date. Don't say I am currently studying if my graduation date has passed. Keep the original meaning without adding new details, and don't list all skills. Write in the first person (using \"I\" statements, not \"he\" statements). " . $parsedData['summary'];
+                $summaryResponse = GeminiAi::generateText($summaryPrompt, [
+                    'model' => 'gemini-1.5-pro',
+                    'raw' => true,
+                    'generationConfig' => [
+                        'temperature' => 0.7,
+                        'maxOutputTokens' => 150
+                    ]
+                ]);
+                $summaryText = $summaryResponse['candidates'][0]['content']['parts'][0]['text'] ?? null;
+                $parsedData['summary'] = trim($summaryText) !== '' ? $summaryText : $parsedData['summary'];
             }
 
             return response()->json([
@@ -292,8 +306,8 @@ Return each field on its own line.\n" . $cvContent;
     private function separateLanguages(array $result): array
     {
         $commonProgrammingLanguages = [
-            'python', 'java', 'c++', 'c#', 'php', 'javascript', 
-            'typescript', 'ruby', 'go', 'swift', 'kotlin', 'perl', 
+            'python', 'java', 'c++', 'c#', 'php', 'javascript',
+            'typescript', 'ruby', 'go', 'swift', 'kotlin', 'perl',
             'r', 'scala', 'objective-c', 'html', 'css'
         ];
 
