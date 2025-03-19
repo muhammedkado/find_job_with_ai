@@ -25,6 +25,6 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 Route::post('/analyze-cv', [CVController::class, 'analyze']);
 
 Route::get('/jobsearch', [JobSearchController::class, 'searchJobs']);
-Route::get('/enhance', [CVController::class, 'enhance']);
+Route::post('/enhance', [CVController::class, 'enhance']);
 
 
