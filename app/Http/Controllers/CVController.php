@@ -10,7 +10,7 @@ use Amrachraf6699\LaravelGeminiAi\Facades\GeminiAi;
 
 class CVController extends Controller
 {
-    public function analyze(Request $request)
+    public function update(Request $request)
     {
         $validator = Validator::make($request->all(), [
             'cv' => 'required|file|mimes:pdf|max:2048',
@@ -102,6 +102,47 @@ Return each field on its own line.\n" . $cvContent;
                 'message' => 'Analysis completed successfully',
                 'data' => $parsedData
             ]);
+
+        } catch (\Exception $e) {
+            $errorMessage = config('app.debug')
+                ? 'API Error: ' . $e->getMessage()
+                : 'Internal server error. Please try again later.';
+            return response()->json([
+                'success' => false,
+                'message' => $errorMessage,
+                'errors' => config('app.debug') ? [
+                    'exception' => get_class($e),
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine()
+                ] : null
+            ], 500);
+        }
+    }
+
+    public function analyze(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'cv' => 'required|file|mimes:pdf|max:2048',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid request parameters.',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            $path = $request->file('cv')->store('temp');
+            $pdfParser = new Parser();
+            $pdf = $pdfParser->parseFile(Storage::path($path));
+            $cvContent = $pdf->getText();
+            Storage::delete($path);
+
+          
+
+           
 
         } catch (\Exception $e) {
             $errorMessage = config('app.debug')
@@ -384,7 +425,7 @@ Return each field on its own line.\n" . $cvContent;
     
             // Ensure we get exactly 2 lines
             $lines = preg_split('/\n+/', $enhancedText);
-            $formattedOutput = array_slice(array_filter(array_map('trim', $lines)), 0, 2);
+            $formattedOutput = implode("\n", array_slice(array_filter(array_map('trim', $lines)), 0, 2));
     
             return response()->json([
                 'success' => !empty($formattedOutput),
