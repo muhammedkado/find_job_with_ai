@@ -333,4 +333,13 @@ Return each field on its own line.\n" . $cvContent;
 
         return $result;
     }
+
+    public function enhance () 
+    {
+        return response()->json([
+            'success' => true,
+            'message' => ' completed successfully',
+            'data' => null
+        ]);
+    }
 }
