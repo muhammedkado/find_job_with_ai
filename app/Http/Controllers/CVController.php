@@ -334,12 +334,80 @@ Return each field on its own line.\n" . $cvContent;
         return $result;
     }
 
-    public function enhance () 
+    public function enhance(Request $request)
     {
-        return response()->json([
-            'success' => true,
-            'message' => ' completed successfully',
-            'data' => null
+        $validator = Validator::make($request->all(), [
+            'text' => 'required|string|max:2000',
+            'section' => 'sometimes|string|in:experience,project,education,summary'
         ]);
+    
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid request parameters.',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+    
+        try {
+            $text = $request->input('text');
+            $section = $request->input('section', 'general');
+    
+            // Context-aware enhancement prompts
+            $prompts = [
+                'experience' => "Rewrite this work experience description to be more professional and impactful. 
+                               Focus on achievements and measurable outcomes. Keep it concise (2 lines max). Text: ",
+                'project' => "Rephrase this project description to highlight technical challenges and solutions. 
+                            Use active voice and technical terminology. Keep it brief (2 lines). Text: ",
+                'education' => "Enhance this education entry to emphasize relevant coursework and accomplishments. 
+                              Maintain academic formal tone. 2 lines maximum. Text: ",
+                'summary' => "Improve this professional summary to be more compelling and ATS-friendly. 
+                            Focus on key qualifications and career highlights. Keep it to 2 strong lines. Text: ",
+                'general' => "Rewrite the following text to be more professional and concise while maintaining meaning. 
+                            Use formal business language and keep it to two short lines. Text: "
+            ];
+    
+            $prompt = $prompts[$section] ?? $prompts['general'];
+            $fullPrompt = $prompt . "\n\n" . $text;
+    
+            $response = GeminiAi::generateText($fullPrompt, [
+                'model' => 'gemini-1.5-pro',
+                'raw' => true,
+                'generationConfig' => [
+                    'temperature' => 0.3,  // Lower temperature for more focused output
+                    'maxOutputTokens' => 100
+                ]
+            ]);
+    
+            $enhancedText = $response['candidates'][0]['content']['parts'][0]['text'] ?? null;
+            $enhancedText = trim($enhancedText ?? '');
+    
+            // Ensure we get exactly 2 lines
+            $lines = preg_split('/\n+/', $enhancedText);
+            $formattedOutput = array_slice(array_filter(array_map('trim', $lines)), 0, 2);
+    
+            return response()->json([
+                'success' => !empty($formattedOutput),
+                'message' => !empty($formattedOutput) 
+                    ? 'Enhancement completed successfully' 
+                    : 'Could not enhance the text',
+                'data' => !empty($formattedOutput) ? $formattedOutput : null
+            ]);
+    
+        } catch (\Exception $e) {
+            $errorMessage = config('app.debug')
+                ? 'Enhancement Error: ' . $e->getMessage()
+                : 'Enhancement failed. Please try again.';
+            
+            return response()->json([
+                'success' => false,
+                'message' => $errorMessage,
+                'errors' => config('app.debug') ? [
+                    'exception' => get_class($e),
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine()
+                ] : null
+            ], 500);
+        }
     }
 }
