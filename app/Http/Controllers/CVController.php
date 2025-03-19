@@ -25,6 +25,57 @@ class CVController extends Controller
         }
 
         try {
+            $istest = $request->input('test');
+            if ($istest) {
+                $defaultStructure = [
+                    'name' => 'John Doe',
+                    'Birthday' => '1990-01-01',
+                    'Job Title' => 'Software Engineer',
+                    'summary' => 'Experienced software engineer with a strong background in developing scalable web applications.',
+                    'Education' => [
+                        [
+                            'degree' => 'B.Sc. Computer Science',
+                            'institution' => 'University of Example',
+                            'graduationYear' => '2012'
+                        ]
+                    ],
+                    'Experience' => [
+                        [
+                            'position' => 'Senior Software Engineer',
+                            'employer' => 'Tech Company',
+                            'dates' => '2015-2020',
+                            'description' => 'Developed and maintained web applications using PHP and Laravel.'
+                        ]
+                    ],
+                    'Internships' => [
+                        [
+                            'position' => 'Software Engineering Intern',
+                            'employer' => 'Startup Inc.',
+                            'dates' => '2014',
+                            'description' => 'Assisted in the development of a mobile application.'
+                        ]
+                    ],
+                    'Projects' => [
+                        [
+                            'name' => 'Project Alpha',
+                            'description' => 'A web application for managing tasks and projects.',
+                            'technologies' => 'PHP, Laravel, MySQL',
+                            'duration' => '6 months'
+                        ]
+                    ],
+                    'Skills' => ['PHP', 'Laravel', 'JavaScript', 'MySQL'],
+                    'Languages' => ['English', 'Spanish'],
+                    'Social Media Accounts' => [
+                        'linkedin' => 'https://linkedin.com/in/johndoe',
+                        'github' => 'https://github.com/johndoe'
+                    ]
+                ];
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Test completed successfully',
+                    'data' => $defaultStructure
+                ]);
+            } else {
             // Process PDF file
             $path = $request->file('cv')->store('temp');
             $pdf = (new Parser())->parseFile(Storage::path($path));
@@ -163,6 +214,7 @@ PROMPT;
                 'message' => 'Analysis completed successfully',
                 'data' => $parsedData
             ]);
+        }
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
