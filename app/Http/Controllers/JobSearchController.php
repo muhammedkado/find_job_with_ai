@@ -14,7 +14,7 @@ class JobSearchController extends Controller
 {
     public function searchJobs(Request $request)
     {
-        $query = $request->input('query', 'developer jobs in jordan');
+        $query = $request->input('position', 'developer jobs in jordan');
         $page = $request->input('page', 1);
         $numPages = $request->input('num_pages', 1);
         $country = $request->input('country', 'jo');
@@ -90,7 +90,7 @@ class JobSearchController extends Controller
                 'x-rapidapi-host' => 'jsearch.p.rapidapi.com',
                 'x-rapidapi-key' => env('RAPIDAPI_KEY'),
             ])->get('https://jsearch.p.rapidapi.com/search', [
-                'query' => $request->input('query', 'developer jobs in usa'),
+                'query' => $request->input('position', 'developer jobs in usa'),
                 'page' => $request->input('page', 1),
                 'num_pages' => $request->input('num_pages', 2),
                 'country' => strtolower($request->input('country', 'us')),
