@@ -37,4 +37,13 @@ class RouteServiceProvider extends ServiceProvider
                 ->group(base_path('routes/web.php'));
         });
     }
+
+
+    protected function configureRateLimiting()
+    {
+        RateLimiter::for('gemini-jobs', function ($request) {
+            return Limit::perMinute(120);
+        });
+    }
+
 }

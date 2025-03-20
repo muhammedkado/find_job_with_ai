@@ -6,6 +6,7 @@ use Amrachraf6699\LaravelGeminiAi\Facades\GeminiAi;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Smalot\PdfParser\Parser;
@@ -39,7 +40,7 @@ class JobSearchController extends Controller
 
     public function search(Request $request)
     {
-        // Validation
+        // Validate PDF file
         $validator = Validator::make($request->all(), [
             'cv' => 'required|file|mimes:pdf|max:2048',
         ]);
@@ -53,13 +54,13 @@ class JobSearchController extends Controller
         }
 
         try {
-            // Process CV
+            // Process CV file
             $path = $request->file('cv')->store('temp');
             $pdf = (new Parser())->parseFile(Storage::path($path));
-            $cvContent = substr($pdf->getText(), 0, 10000); // Truncate to 10k chars
+            $cvContent = substr($pdf->getText(), 0, 10000); // Limit to 10k characters
             Storage::delete($path);
 
-            // Fetch jobs
+            // Fetch jobs from JSearch API
             $jsearchResponse = Http::withHeaders([
                 'x-rapidapi-host' => 'jsearch.p.rapidapi.com',
                 'x-rapidapi-key' => env('RAPIDAPI_KEY'),
@@ -67,66 +68,78 @@ class JobSearchController extends Controller
                 'query' => $request->input('query', 'developer jobs in usa'),
                 'page' => $request->input('page', 1),
                 'num_pages' => $request->input('num_pages', 1),
-                'country' => $request->input('country', 'jo'),
+                'country' => $request->input('country', 'us'),
                 'date_posted' => $request->input('date_posted', 'all'),
             ]);
 
             if (!$jsearchResponse->successful()) {
                 return response()->json([
-                    'error' => 'JSearch API failed',
+                    'error' => 'Failed to fetch jobs',
                     'details' => $jsearchResponse->body()
                 ], $jsearchResponse->status());
             }
 
-            $data = $jsearchResponse->json();
-            $jobs = $data['data'] ?? [];
+            $jobs = $jsearchResponse->json()['data'] ?? [];
 
-            // Cache key
-            $cacheKey = 'job_match_'.md5($cvContent.json_encode($jobs));
-
-            // Return cached results if available
-            if (Cache::has($cacheKey)) {
-                return response()->json(Cache::get($cacheKey));
+            // Extract job descriptions
+            $jobDescriptions = [];
+            foreach ($jobs as $job) {
+                $jobDescriptions[] = [
+                    'id' => $job['job_id'],
+                    'text' => substr($job['job_description'] ?? '', 0, 2000) // Limit to 2000 chars
+                ];
             }
 
-            // Batch processing attempt
-            try {
-                $analysis = $this->analyzeJobsBatch($cvContent, $jobs);
-            } catch (\Exception $e) {
-                \Log::error('Batch analysis failed: '.$e->getMessage());
-                $analysis = $this->processJobsIndividually($cvContent, $jobs);
-            }
+            // Create analysis prompt
+            $prompt = $this->createAnalysisPrompt($cvContent, $jobDescriptions);
 
-            // Merge results
-            $jobs = array_map(function($job) use ($analysis) {
+            // Get Gemini analysis
+            $geminiResponse = GeminiAi::generateText($prompt, [
+                'model' => 'gemini-1.5-pro',
+                'temperature' => 0.2,
+                'maxOutputTokens' => 4000
+            ]);
+
+            $responseText = is_array($geminiResponse)
+                ? ($geminiResponse['text'] ?? json_encode($geminiResponse))
+                : (string)$geminiResponse;
+            // Parse compatibility scores
+            $compatibilityScores = $this->parseGeminiResponse($responseText);
+
+            // Merge scores with job data
+            $processedJobs = array_map(function($job) use ($compatibilityScores) {
                 $jobId = $job['job_id'];
-                return array_merge($job, [
-                    'compatibility_score' => $analysis[$jobId]['score'] ?? 0,
-                    'match_reasons' => $analysis[$jobId]['reasons'] ?? ['Analysis unavailable']
-                ]);
+                $scoreData = $compatibilityScores[$jobId] ?? ['score' => 0, 'reasons' => []];
+                return [
+                    'job_id' => $jobId,
+                    'job_title' => $job['job_title'],
+                    'job_description' => $job['job_description'],
+                    'job_posted_at' => $job['job_posted_at'],
+                    'job_location' => $job['job_location'],
+                    'job_publisher' => $job['job_publisher'],
+                    'job_apply_link' => $job['job_apply_link'],
+                    'job_employment_type' => $job['job_employment_type'],
+                    'employer_logo' => $job['employer_logo'],
+                    'employer_name' => $job['employer_name'],
+                    'compatibility' => (int)($scoreData['score'] ?? 0),
+                    'match_reasons' => $scoreData['reasons']
+                ];
             }, $jobs);
 
-            // Sort results
-            usort($jobs, fn($a, $b) => $b['compatibility_score'] <=> $a['compatibility_score']);
-
-            // Prepare response
-            $response = [
-                'data' => $jobs,
-                'analysis_metadata' => [
-                    'total_jobs' => count($jobs),
-                    'average_score' => collect($jobs)->avg('compatibility_score'),
-                    'processing_mode' => isset($e) ? 'individual' : 'batch',
+            // Sort by compatibility score
+            usort($processedJobs, fn($a, $b) => $b['compatibility'] <=> $a['compatibility']);
+            $averageScore = collect($processedJobs)->avg('compatibility');
+            $averageScore = round($averageScore, 1); // Round to 1 decimal place
+            return response()->json([
+                'jobs' => $processedJobs,
+                'meta' => [
+                    'total_jobs' => count($processedJobs),
+                    'average_score' => $averageScore,
                     'timestamp' => now()->toDateTimeString()
                 ]
-            ];
-
-            // Cache response
-            Cache::put($cacheKey, $response, 3600); // 1 hour
-
-            return response()->json($response);
+            ]);
 
         } catch (\Exception $e) {
-            \Log::error('Search error: '.$e->getMessage());
             return response()->json([
                 'error' => 'Processing failed',
                 'message' => $e->getMessage()
@@ -134,101 +147,49 @@ class JobSearchController extends Controller
         }
     }
 
-    private function analyzeJobsBatch(string $cvContent, array $jobs): array
+    private function createAnalysisPrompt(string $cvContent, array $jobDescriptions): string
     {
-        $batchLimit = 50; // Max jobs per batch
-        $batchJobs = array_slice($jobs, 0, $batchLimit);
+        $prompt = "Analyze CV compatibility with these job descriptions. Return JSON format:\n";
+        $prompt .= json_encode(['jobs' => [
+            'JOB_ID' => [
+                'score' => '0-100',
+                'reasons' => ['array of matching skills/requirements']
+            ]
+        ]]);
 
-        // Prepare job descriptions
-        $jobDescriptions = [];
-        foreach ($batchJobs as $job) {
-            $jobDescriptions[$job['job_id'] = substr($job['job_description'] ?? '', 0, 1000)];
+        $prompt .= "\n\nCV CONTENT:\n" . $cvContent . "\n\nJOB DESCRIPTIONS:\n";
+
+        foreach ($jobDescriptions as $desc) {
+            $prompt .= "--- JOB ID: {$desc['id']} ---\n{$desc['text']}\n\n";
         }
 
-        // Build prompt
-        $prompt = <<<PROMPT
-    Analyze job compatibility between this CV and multiple positions. Return JSON with:
-    {
-        "jobs": {
-            "job_id1": { "score": 0-100, "reasons": ["reason1", "reason2"] },
-            "job_id2": { ... }
-        }
+        $prompt .= "\nReturn ONLY valid JSON. Focus on project and technical skills matching.";
+
+        return $prompt;
     }
 
-    CV:
-    {$cvContent}
+    private function parseGeminiResponse(string $responseText): array
+    {
+        // First try to parse the entire response as JSON
+        $result = json_decode($responseText, true);
 
-    Jobs:
-    ###
-    PROMPT;
-
-        foreach ($jobDescriptions as $id => $desc) {
-            $prompt .= "\n{$id}:\n{$desc}\n---\n";
+        // If that fails, try to extract JSON from the response
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            preg_match('/\{(?:[^{}]|(?R))*\}/s', $responseText, $matches);
+            $result = json_decode($matches[0] ?? '{}', true);
         }
 
-        // API call
-        $response = GeminiAi::generateText($prompt, [
-            'model' => 'gemini-1.5-pro',
-            'temperature' => 0.2,
-            'maxOutputTokens' => 4000
-        ]);
-
-        // Parse response
-        preg_match('/\{"jobs":\s*\{.*?\}\}/s', $response['text'], $matches);
-        $result = json_decode($matches[0] ?? '{}', true);
-
-        return $result['jobs'] ?? [];
-    }
-
-    private function processJobsIndividually(string $cvContent, array $jobs): array
-    {
-        $rateLimiter = RateLimiter::perMinute(120);
-        $analysis = [];
-
-        foreach ($jobs as $job) {
-            try {
-                if (!$rateLimiter->attempt()) {
-                    $analysis[$job['job_id']] = [
-                        'score' => 0,
-                        'reasons' => ['Rate limit exceeded']
-                    ];
-                    continue;
-                }
-
-                $response = GeminiAi::generateText(
-                    $this->individualPrompt($cvContent, $job),
-                    ['model' => 'gemini-pro', 'maxOutputTokens' => 1000]
-                );
-
-                preg_match('/\{"score":\s*\d+,?\s*"reasons":\s*\[.*?\]\}/s', $response['text'], $match);
-                $analysis[$job['job_id']] = json_decode($match[0] ?? '{"score":0}', true);
-
-            } catch (\Exception $e) {
-                \Log::warning("Individual analysis failed for {$job['job_id']}: ".$e->getMessage());
-                $analysis[$job['job_id']] = ['score' => 0, 'reasons' => ['Analysis error']];
-            }
+        // Convert string scores to integers and validate structure
+        $compatibilityScores = [];
+        foreach ($result['jobs'] ?? [] as $jobId => $jobData) {
+            $compatibilityScores[$jobId] = [
+                'score' => intval($jobData['score'] ?? 0),
+                'reasons' => is_array($jobData['reasons'] ?? null)
+                    ? $jobData['reasons']
+                    : ['No analysis provided']
+            ];
         }
 
-        return $analysis;
-    }
-
-    private function individualPrompt(string $cvContent, array $job): string
-    {
-        $truncatedCV = substr($cvContent, 0, 5000);
-        $truncatedJob = substr($job['job_description'] ?? '', 0, 2000);
-
-        return <<<PROMPT
-    Analyze compatibility between this CV and job. Return JSON:
-    {
-        "score": 0-100,
-        "reasons": ["short match reason 1", "reason 2"]
-    }
-
-    CV:
-    {$truncatedCV}
-
-    Job:
-    {$truncatedJob}
-    PROMPT;
+        return $compatibilityScores;
     }
 }
