@@ -107,7 +107,7 @@ class JobSearchController extends Controller
             ])->get('https://jsearch.p.rapidapi.com/search', [
                 'query' => $request->input('position', 'developer jobs in usa'),
                 'page' => $request->input('page', 1),
-                'num_pages' => $request->input('num_pages', 2),
+                'num_pages' => $request->input('num_pages', 1),
                 'country' => strtolower($request->input('country', 'us')),
                 'date_posted' => $request->input('date_posted', 'all'),
             ]);
