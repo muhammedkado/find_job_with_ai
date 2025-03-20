@@ -102,7 +102,7 @@ class CVController extends Controller
                 "experience": [
                     {
                         "position": "Job title verbatim",
-                        "employer": "Company name exactly as written",
+                        "company": "Company name exactly as written",
                         "start_date": "Employment start date as specified",
                         "end_date": "Employment finish date as specified (use 'Present' if currently employed)",
                         "description": "Full job description with bullet points exactly as written"
@@ -111,7 +111,7 @@ class CVController extends Controller
                 "internships": ["Array of internship details"],
                 "projects": [
                     {
-                        "name": "Exact project name as written",
+                        "title": "Exact project name as written",
                         "description": "Full project description verbatim",
                         "technologies": "Technologies listed exactly as shown",
                         "duration": "Project duration as specified"
@@ -181,7 +181,7 @@ PROMPT;
                 'experience' => [
                     [
                         'position' => null,
-                        'employer' => null,
+                        'company' => null,
                         'dates' => null,
                         'description' => null
                     ]
