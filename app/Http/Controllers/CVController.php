@@ -29,17 +29,17 @@ class CVController extends Controller
             if ($istest) {
                 $defaultStructure = [
                     'name' => 'John Doe',
-                    'Birthday' => '1990-01-01',
-                    'Job Title' => 'Software Engineer',
+                    'birthday' => '1990-01-01',
+                    'job_title' => 'Software Engineer',
                     'summary' => 'Experienced software engineer with a strong background in developing scalable web applications.',
-                    'Education' => [
+                    'education' => [
                         [
                             'degree' => 'B.Sc. Computer Science',
                             'institution' => 'University of Example',
                             'graduationYear' => '2012'
                         ]
                     ],
-                    'Experience' => [
+                    'experience' => [
                         [
                             'position' => 'Senior Software Engineer',
                             'employer' => 'Tech Company',
@@ -47,7 +47,7 @@ class CVController extends Controller
                             'description' => 'Developed and maintained web applications using PHP and Laravel.'
                         ]
                     ],
-                    'Internships' => [
+                    'internships' => [
                         [
                             'position' => 'Software Engineering Intern',
                             'employer' => 'Startup Inc.',
@@ -55,7 +55,7 @@ class CVController extends Controller
                             'description' => 'Assisted in the development of a mobile application.'
                         ]
                     ],
-                    'Projects' => [
+                    'projects' => [
                         [
                             'name' => 'Project Alpha',
                             'description' => 'A web application for managing tasks and projects.',
@@ -63,9 +63,9 @@ class CVController extends Controller
                             'duration' => '6 months'
                         ]
                     ],
-                    'Skills' => ['PHP', 'Laravel', 'JavaScript', 'MySQL'],
-                    'Languages' => ['English', 'Spanish'],
-                    'Social Media Accounts' => [
+                    'skills' => ['PHP', 'Laravel', 'JavaScript', 'MySQL'],
+                    'languages' => ['English', 'Spanish'],
+                    'social_media_accounts' => [
                         'linkedin' => 'https://linkedin.com/in/johndoe',
                         'github' => 'https://github.com/johndoe'
                     ]
@@ -85,7 +85,7 @@ class CVController extends Controller
             // Prepare structured prompt
             $prompt = <<<PROMPT
             Extract CV information exactly as written, returning ONLY a valid JSON object formatted as:
-            
+
             ```json
             {
                 "name": "Full name as written",
@@ -98,7 +98,7 @@ class CVController extends Controller
                         "institution": "Institution name as written",
                         "graduationYear": "Year or date exactly as shown"
                     }
-                ],                
+                ],
                 "Experience": [
                      {
                         "position": "Job title verbatim",
@@ -177,10 +177,10 @@ PROMPT;
             $defaultStructure = [
                 'name' => null,
                 'Birthday' => null,
-                'Job Title' => null,
+                'job_title' => null,
                 'summary' => null,
-                'Education' => [],
-                'Experience' => [
+                'education' => [],
+                'experience' => [
                     [
                         'position' => null,
                         'employer' => null,
@@ -188,11 +188,11 @@ PROMPT;
                         'description' => null
                     ]
                 ],
-                'Internships' => [],
-                'Projects' => [],
-                'Skills' => [],
-                'Languages' => [],
-                'Social Media Accounts' => [
+                'internships' => [],
+                'projects' => [],
+                'skills' => [],
+                'languages' => [],
+                'social_media_accounts' => [
                     'linkedin' => null,
                     'github' => null
                 ]
@@ -256,15 +256,15 @@ PROMPT;
             } else {
                 // Context-aware enhancement prompts
                 $prompts = [
-                    'experience' => "Rewrite this work experience description to be more professional and impactful. 
+                    'experience' => "Rewrite this work experience description to be more professional and impactful.
                            Focus on achievements and measurable outcomes. Keep it concise (2 lines max). Text: ",
-                    'project' => "Rephrase this project description to highlight technical challenges and solutions. 
+                    'project' => "Rephrase this project description to highlight technical challenges and solutions.
                         Use active voice and technical terminology. Keep it brief (2 lines). Text: ",
-                    'education' => "Enhance this education entry to emphasize relevant coursework and accomplishments. 
+                    'education' => "Enhance this education entry to emphasize relevant coursework and accomplishments.
                           Maintain academic formal tone. 2 lines maximum. Text: ",
-                    'summary' => "Improve this professional summary to be more compelling and ATS-friendly. 
+                    'summary' => "Improve this professional summary to be more compelling and ATS-friendly.
                         Focus on key qualifications and career highlights. Keep it to 2 strong lines. Text: ",
-                    'general' => "Rewrite the following text to be more professional and concise while maintaining meaning. 
+                    'general' => "Rewrite the following text to be more professional and concise while maintaining meaning.
                         Use formal business language and keep it to two short lines. Text: "
                 ];
 
