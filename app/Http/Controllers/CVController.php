@@ -200,10 +200,10 @@ PROMPT;
 
             // Merge with defaults and ensure correct types
             $parsedData = array_merge($defaultStructure, $parsedData);
-            $parsedData['internships'] = (array)($parsedData['Internships'] ?? []);
-            $parsedData['projects'] = (array)($parsedData['Projects'] ?? []);
-            $parsedData['skills'] = (array)($parsedData['Skills'] ?? []);
-            $parsedData['languages'] = (array)($parsedData['Languages'] ?? []);
+            $parsedData['internships'] = (array)($parsedData['internships'] ?? []);
+            $parsedData['projects'] = (array)($parsedData['projects'] ?? []);
+            $parsedData['skills'] = (array)($parsedData['skills'] ?? []);
+            $parsedData['languages'] = (array)($parsedData['languages'] ?? []);
             $parsedData['social_media_accounts'] = array_merge(
                 $defaultStructure['social_media_accounts'],
                 (array)($parsedData['social_media_accounts'] ?? [])
