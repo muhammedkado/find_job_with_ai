@@ -70,9 +70,9 @@ class JobSearchController extends Controller
                         'UTF-8'
                     );
             }
-            if ($request->has('expertise')) {
-                $candidateInfo .= "\n\nmy  expertise:\n" . mb_convert_encoding(
-                        substr($request->input('expertise'), 0, 10000),
+            if ($request->has('experience')) {
+                $candidateInfo .= "\n\nmy  Experience:\n" . mb_convert_encoding(
+                        substr($request->input('experience'), 0, 10000),
                         'UTF-8',
                         'UTF-8'
                     );
@@ -184,7 +184,7 @@ class JobSearchController extends Controller
 **Task**: Analyze job compatibility based on:
 - Candidate's technical skills
 - Project experience
-- Professional expertise
+- Professional Experience
 - Career summary
 - Job requirements
 
