@@ -38,52 +38,67 @@ class JobSearchController extends Controller
         }
     }
 
-    public function search(Request $request)
+    public function jobs(Request $request)
     {
         // Validate request parameters
-        $validator = Validator::make($request->all(), [
-            'skills' => 'required|string|max:5000',
-            'project' => 'nullable|string|max:10000',
-            'query' => 'nullable|string',
-            'country' => 'nullable|string|size:2',
-        ]);
+    $validator = Validator::make($request->all(), [
+        'skills' => 'required|string|max:5000',
+        'projects' => 'nullable|array',
+        'projects.*.description' => 'nullable|string|max:10000',
+        'experience' => 'nullable|array',
+        'experience.*.description' => 'nullable|string|max:10000',
+        'summary' => 'nullable|string|max:10000',
+        'position' => 'nullable|string',
+        'contact' => 'nullable|array',
+    ]);
 
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Invalid request parameters.',
-                'errors' => $validator->errors()
-            ], 422);
+    if ($validator->fails()) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Invalid request parameters.',
+            'errors' => $validator->errors()
+        ], 422);
+    }
+
+    try {
+        // Prepare candidate information
+        $candidateInfo = "Skills:\n" . mb_convert_encoding(
+            substr($request->input('skills'), 0, 5000),
+            'UTF-8',
+            'UTF-8'
+        );
+
+        // Process projects
+        if ($request->has('projects')) {
+            $projectDescriptions = collect($request->input('projects'))
+                ->pluck('description')
+                ->implode("\n");
+            $candidateInfo .= "\n\nProject Experience:\n" . mb_convert_encoding(
+                substr($projectDescriptions, 0, 10000),
+                'UTF-8',
+                'UTF-8'
+            );
         }
 
-        try {
-            // Prepare candidate information
-            $candidateInfo = "Skills:\n" . mb_convert_encoding(
-                    substr($request->input('skills'), 0, 5000),
-                    'UTF-8',
-                    'UTF-8'
+        // Process experience
+        if ($request->has('experience')) {
+            $experienceDescriptions = collect($request->input('experience'))
+                ->pluck('description')
+                ->implode("\n");
+            $candidateInfo .= "\n\nProfessional Experience:\n" . mb_convert_encoding(
+                substr($experienceDescriptions, 0, 10000),
+                'UTF-8',
+                'UTF-8'
             );
-            if ($request->has('project')) {
-                $candidateInfo .= "\n\nProject Experience:\n" . mb_convert_encoding(
-                        substr($request->input('project'), 0, 10000),
-                        'UTF-8',
-                        'UTF-8'
-                    );
-            }
-            if ($request->has('experience')) {
-                $candidateInfo .= "\n\nmy  Experience:\n" . mb_convert_encoding(
-                        substr($request->input('experience'), 0, 10000),
-                        'UTF-8',
-                        'UTF-8'
-                    );
-            }
-            if ($request->has('summary')) {
-                $candidateInfo .= "\n\nmy summary:\n" . mb_convert_encoding(
-                        substr($request->input('summary'), 0, 10000),
-                        'UTF-8',
-                        'UTF-8'
-                    );
-            }
+        }
+
+        if ($request->has('summary')) {
+            $candidateInfo .= "\n\nSummary:\n" . mb_convert_encoding(
+                substr($request->input('summary'), 0, 10000),
+                'UTF-8',
+                'UTF-8'
+            );
+        }
 
             // Fetch jobs from JSearch API
             $jsearchResponse = Http::withHeaders([

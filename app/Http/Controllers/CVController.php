@@ -94,10 +94,10 @@ class CVController extends Controller
                 "contact": { email: '', phone: '', city: '', country: '' },
                 "summary": "Professional summary text or null",
                 "education": {
-                        "degree": "Degree name",
-                        "institution": "Institution name",
-                        "startingYear": "Starting year",
-                        "graduationYear": "Graduation year"
+                    "degree": "Degree name",
+                    "institution": "Institution name",
+                    "startingYear": "Starting year",
+                    "graduationYear": "Graduation year"
                 },
                 "experience": [
                     {
