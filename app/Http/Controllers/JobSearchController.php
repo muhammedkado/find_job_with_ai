@@ -137,7 +137,8 @@ class JobSearchController extends Controller
             $geminiResponse = GeminiAi::generateText($prompt, [
                 'model' => 'gemini-1.5-pro',
                 'temperature' => 0.2,
-                'maxOutputTokens' => 4000
+                'maxOutputTokens' => 4000,
+                'timeout' => 120,
             ]);
 
             $responseText = is_array($geminiResponse)
