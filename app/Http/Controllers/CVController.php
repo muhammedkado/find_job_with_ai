@@ -89,17 +89,17 @@ class CVController extends Controller
             ```json
             {
                 "name": "Full name as written",
-                "Birthday": "Birth date or 'Not specified'",
-                "Job Title": "Current/Main job title",
+                "birthday": "Birth date or null",
+                "job_title": "Current/Main job title",
                 "summary": "Professional summary text or null",
-                "Education": [
+                "education": [
                     {
                         "degree": "Exact degree name",
                         "institution": "Institution name as written",
                         "graduationYear": "Year or date exactly as shown"
                     }
                 ],
-                "Experience": [
+                "experience": [
                      {
                         "position": "Job title verbatim",
                         "employer": "Company name exactly as written",
@@ -107,8 +107,8 @@ class CVController extends Controller
                         "description": "Full job description with bullet points exactly as written"
                     }
                 ],
-                "Internships": ["Array of internship details"],
-                "Projects": [
+                "internships": ["Array of internship details"],
+                "projects": [
                     {
                         "name": "Exact project name as written",
                         "description": "Full project description verbatim",
@@ -116,9 +116,9 @@ class CVController extends Controller
                         "duration": "Project duration as specified"
                     }
                 ],
-                "Skills": ["Array of technical skills"],
-                "Languages": ["Array of languages with proficiency"],
-                "Social Media Accounts": {
+                "skills": ["Array of technical skills"],
+                "languages": ["Array of languages with proficiency"],
+                "social_media_accounts": {
                     "linkedin": "URL or null",
                     "github": "URL or null"
                 }
@@ -176,7 +176,7 @@ PROMPT;
             // Normalize data structure
             $defaultStructure = [
                 'name' => null,
-                'Birthday' => null,
+                'birthday' => null,
                 'job_title' => null,
                 'summary' => null,
                 'education' => [],
@@ -200,13 +200,13 @@ PROMPT;
 
             // Merge with defaults and ensure correct types
             $parsedData = array_merge($defaultStructure, $parsedData);
-            $parsedData['Internships'] = (array)($parsedData['Internships'] ?? []);
-            $parsedData['Projects'] = (array)($parsedData['Projects'] ?? []);
-            $parsedData['Skills'] = (array)($parsedData['Skills'] ?? []);
-            $parsedData['Languages'] = (array)($parsedData['Languages'] ?? []);
-            $parsedData['Social Media Accounts'] = array_merge(
-                $defaultStructure['Social Media Accounts'],
-                (array)($parsedData['Social Media Accounts'] ?? [])
+            $parsedData['internships'] = (array)($parsedData['Internships'] ?? []);
+            $parsedData['projects'] = (array)($parsedData['Projects'] ?? []);
+            $parsedData['skills'] = (array)($parsedData['Skills'] ?? []);
+            $parsedData['languages'] = (array)($parsedData['Languages'] ?? []);
+            $parsedData['social_media_accounts'] = array_merge(
+                $defaultStructure['social_media_accounts'],
+                (array)($parsedData['social_media_accounts'] ?? [])
             );
 
             return response()->json([

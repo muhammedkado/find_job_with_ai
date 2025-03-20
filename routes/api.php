@@ -22,9 +22,10 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 });*/
 
 
-Route::post('/analyze-cv', [CVController::class, 'analyze']);
+Route::post('/upload-cv', [CVController::class, 'analyze']);
 
 Route::get('/jobsearch', [JobSearchController::class, 'searchJobs']);
+Route::post('/search', [JobSearchController::class, 'search']);
 Route::post('/enhance', [CVController::class, 'enhance']);
 
 
