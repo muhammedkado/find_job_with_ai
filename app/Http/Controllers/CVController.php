@@ -182,7 +182,8 @@ PROMPT;
                     [
                         'position' => null,
                         'company' => null,
-                        'dates' => null,
+                        "start_date"=> null,
+                        "end_date"=> null,
                         'description' => null
                     ]
                 ],
