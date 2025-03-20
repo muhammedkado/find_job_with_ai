@@ -90,23 +90,24 @@ class CVController extends Controller
             {
                 "name": "Full name as written",
                 "birthday": "Birth date or null",
-                "job_title": "Current/Main job title",
+                "position": "Current/Main job title",
+                "contact": { email: '', phone: '', city: '', country: '' },
                 "summary": "Professional summary text or null",
-                "education": [
-                    {
-                        "degree": "Exact degree name",
-                        "institution": "Institution name as written",
-                        "graduationYear": "Year or date exactly as shown"
-                    }
-                ],
+                "education": {
+                        "degree": "Degree name",
+                        "institution": "Institution name",
+                        "startingYear": "Starting year",
+                        "graduationYear": "Graduation year"
+                },
                 "experience": [
-                     {
+                    {
                         "position": "Job title verbatim",
                         "employer": "Company name exactly as written",
-                        "dates": "Employment dates as specified",
+                        "start_date": "Employment start date as specified",
+                        "end_date": "Employment finish date as specified (use 'Present' if currently employed)",
                         "description": "Full job description with bullet points exactly as written"
                     }
-                ],
+                ]
                 "internships": ["Array of internship details"],
                 "projects": [
                     {
@@ -118,7 +119,7 @@ class CVController extends Controller
                 ],
                 "skills": string (list of technical skills separated by commas),
                 "languages": string (list of languages with proficiency separated by commas),
-                "social_media_accounts": {
+                "socialAccounts": {
                     "linkedin": "URL or null",
                     "github": "URL or null"
                 }
@@ -174,9 +175,9 @@ PROMPT;
             $defaultStructure = [
                 'name' => null,
                 'birthday' => null,
-                'job_title' => null,
+                'position' => null,
                 'summary' => null,
-                'education' => [],
+                'education' => null,
                 'experience' => [
                     [
                         'position' => null,
@@ -189,7 +190,7 @@ PROMPT;
                 'projects' => [],
                 'skills' => null,
                 'languages' => null,
-                'social_media_accounts' => [
+                'socialAccounts' => [
                     'linkedin' => null,
                     'github' => null
                 ]
@@ -201,9 +202,9 @@ PROMPT;
             $parsedData['projects'] = (array)($parsedData['projects'] ?? []);
             $parsedData['skills'] = $parsedData['skills'] ?? '';
             $parsedData['languages'] = $parsedData['languages'] ?? '';
-            $parsedData['social_media_accounts'] = array_merge(
-                $defaultStructure['social_media_accounts'],
-                (array)($parsedData['social_media_accounts'] ?? [])
+            $parsedData['socialAccounts'] = array_merge(
+                $defaultStructure['socialAccounts'],
+                (array)($parsedData['socialAccounts'] ?? [])
             );
 
             return response()->json([

@@ -40,9 +40,12 @@ class JobSearchController extends Controller
 
     public function search(Request $request)
     {
-        // Validate PDF file
+        // Validate request parameters
         $validator = Validator::make($request->all(), [
-            'cv' => 'required|file|mimes:pdf|max:2048',
+            'skills' => 'required|string|max:5000',
+            'project' => 'nullable|string|max:10000',
+            'query' => 'nullable|string',
+            'country' => 'nullable|string|size:2',
         ]);
 
         if ($validator->fails()) {
@@ -54,11 +57,33 @@ class JobSearchController extends Controller
         }
 
         try {
-            // Process CV file
-            $path = $request->file('cv')->store('temp');
-            $pdf = (new Parser())->parseFile(Storage::path($path));
-            $cvContent = substr($pdf->getText(), 0, 10000); // Limit to 10k characters
-            Storage::delete($path);
+            // Prepare candidate information
+            $candidateInfo = "Skills:\n" . mb_convert_encoding(
+                    substr($request->input('skills'), 0, 5000),
+                    'UTF-8',
+                    'UTF-8'
+            );
+            if ($request->has('project')) {
+                $candidateInfo .= "\n\nProject Experience:\n" . mb_convert_encoding(
+                        substr($request->input('project'), 0, 10000),
+                        'UTF-8',
+                        'UTF-8'
+                    );
+            }
+            if ($request->has('expertise')) {
+                $candidateInfo .= "\n\nmy  expertise:\n" . mb_convert_encoding(
+                        substr($request->input('expertise'), 0, 10000),
+                        'UTF-8',
+                        'UTF-8'
+                    );
+            }
+            if ($request->has('summary')) {
+                $candidateInfo .= "\n\nmy summary:\n" . mb_convert_encoding(
+                        substr($request->input('summary'), 0, 10000),
+                        'UTF-8',
+                        'UTF-8'
+                    );
+            }
 
             // Fetch jobs from JSearch API
             $jsearchResponse = Http::withHeaders([
@@ -67,8 +92,8 @@ class JobSearchController extends Controller
             ])->get('https://jsearch.p.rapidapi.com/search', [
                 'query' => $request->input('query', 'developer jobs in usa'),
                 'page' => $request->input('page', 1),
-                'num_pages' => $request->input('num_pages', 1),
-                'country' => $request->input('country', 'us'),
+                'num_pages' => $request->input('num_pages', 2),
+                'country' => strtolower($request->input('country', 'us')),
                 'date_posted' => $request->input('date_posted', 'all'),
             ]);
 
@@ -91,7 +116,7 @@ class JobSearchController extends Controller
             }
 
             // Create analysis prompt
-            $prompt = $this->createAnalysisPrompt($cvContent, $jobDescriptions);
+            $prompt = $this->createAnalysisPrompt($candidateInfo, $jobDescriptions);
 
             // Get Gemini analysis
             $geminiResponse = GeminiAi::generateText($prompt, [
@@ -103,6 +128,7 @@ class JobSearchController extends Controller
             $responseText = is_array($geminiResponse)
                 ? ($geminiResponse['text'] ?? json_encode($geminiResponse))
                 : (string)$geminiResponse;
+
             // Parse compatibility scores
             $compatibilityScores = $this->parseGeminiResponse($responseText);
 
@@ -129,7 +155,8 @@ class JobSearchController extends Controller
             // Sort by compatibility score
             usort($processedJobs, fn($a, $b) => $b['compatibility'] <=> $a['compatibility']);
             $averageScore = collect($processedJobs)->avg('compatibility');
-            $averageScore = round($averageScore, 1); // Round to 1 decimal place
+            $averageScore = round($averageScore, 1);
+
             return response()->json([
                 'jobs' => $processedJobs,
                 'meta' => [
@@ -137,6 +164,10 @@ class JobSearchController extends Controller
                     'average_score' => $averageScore,
                     'timestamp' => now()->toDateTimeString()
                 ]
+            ], 200, [
+                JSON_UNESCAPED_UNICODE,
+                JSON_INVALID_UTF8_SUBSTITUTE,
+                JSON_PARTIAL_OUTPUT_ON_ERROR
             ]);
 
         } catch (\Exception $e) {
@@ -147,23 +178,49 @@ class JobSearchController extends Controller
         }
     }
 
-    private function createAnalysisPrompt(string $cvContent, array $jobDescriptions): string
+    private function createAnalysisPrompt(string $candidateInfo, array $jobDescriptions): string
     {
-        $prompt = "Analyze CV compatibility with these job descriptions. Return JSON format:\n";
-        $prompt .= json_encode(['jobs' => [
-            'JOB_ID' => [
-                'score' => '0-100',
-                'reasons' => ['array of matching skills/requirements']
-            ]
-        ]]);
+        $prompt = <<<PROMPT
+**Task**: Analyze job compatibility based on:
+- Candidate's technical skills
+- Project experience
+- Professional expertise
+- Career summary
+- Job requirements
 
-        $prompt .= "\n\nCV CONTENT:\n" . $cvContent . "\n\nJOB DESCRIPTIONS:\n";
+**Response Format**: STRICTLY VALID JSON
+{
+  "jobs": {
+    "JOB_ID": {
+      "score": 0-100,
+    }
+  }
+}
+
+**Candidate Profile**:
+{$candidateInfo}
+**Job Analysis Instructions**:
+1. For each job, identify 3-5 key match reasons
+2. Score based on technical requirements matching
+3. Prioritize specific technologies over generic terms
+4. Consider years of experience where mentioned
+5. Match both explicit and implicit requirements
+
+**Job Descriptions**:
+PROMPT;
 
         foreach ($jobDescriptions as $desc) {
-            $prompt .= "--- JOB ID: {$desc['id']} ---\n{$desc['text']}\n\n";
+            $prompt .= "\n\n--- JOB ID: {$desc['id']} ---\n".trim($desc['text']);
         }
 
-        $prompt .= "\nReturn ONLY valid JSON. Focus on project and technical skills matching.";
+        $prompt .= "\n\n**Important Notes**:\n";
+        $prompt .= "- Return ONLY valid JSON (no markdown)\n";
+        $prompt .= "- Ensure proper JSON escaping\n";
+        $prompt .= "- Array items should be specific technical matches\n";
+        $prompt .= "- If no matches exist, score 0 with empty reasons\n";
+        $prompt .= "- Ignore generic requirements like 'team player'\n";
+        $prompt .= "- Prioritize matches in: ";
+        $prompt .= implode(', ', ['technologies', 'frameworks', 'specific tools', 'certifications']);
 
         return $prompt;
     }
