@@ -117,7 +117,7 @@ class CVController extends Controller
                         "duration": "Project duration as specified"
                     }
                 ],
-                "skills": string (list of technical skills separated by commas),
+                'skills': 'Comma-separated list of TECHNICAL SKILLS (e.g., Python, Git). Exclude category labels like "Languages:"',
                 "languages": string (list of languages with proficiency separated by commas),
                 "socialAccounts": {
                     "linkedin": "URL or null",
