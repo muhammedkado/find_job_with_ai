@@ -64,7 +64,7 @@ class CVController extends Controller
                         ]
                     ],
                     'skills' => ['PHP', 'Laravel', 'JavaScript', 'MySQL'],
-                    'languages' => ['English', 'Spanish'],
+                    'languages' => 'English, Spanish',
                     'social_media_accounts' => [
                         'linkedin' => 'https://linkedin.com/in/johndoe',
                         'github' => 'https://github.com/johndoe'
@@ -116,17 +116,15 @@ class CVController extends Controller
                         "duration": "Project duration as specified"
                     }
                 ],
-                "skills": ["Array of technical skills"],
-                "languages": ["Array of languages with proficiency"],
+                "skills": string (list of technical skills separated by commas),
+                "languages": string (list of languages with proficiency separated by commas),
                 "social_media_accounts": {
                     "linkedin": "URL or null",
                     "github": "URL or null"
                 }
             }
 Rules:
-
 Maintain original text exactly, especially for projects
-
 Preserve ALL project details verbatim
 - Include ALL job description bullet points exactly as written
 - Preserve bullet point characters (•, -, etc.) in descriptions
@@ -140,7 +138,6 @@ Duration formatting
 Use empty arrays if no projects exist
 Use empty arrays if no education/experience exists
 Never modify or rephrase project information
-
 Return ONLY the JSON without additional text
 CV Content:
 $cvContent
@@ -190,8 +187,8 @@ PROMPT;
                 ],
                 'internships' => [],
                 'projects' => [],
-                'skills' => [],
-                'languages' => [],
+                'skills' => null,
+                'languages' => null,
                 'social_media_accounts' => [
                     'linkedin' => null,
                     'github' => null
@@ -202,8 +199,8 @@ PROMPT;
             $parsedData = array_merge($defaultStructure, $parsedData);
             $parsedData['internships'] = (array)($parsedData['internships'] ?? []);
             $parsedData['projects'] = (array)($parsedData['projects'] ?? []);
-            $parsedData['skills'] = (array)($parsedData['skills'] ?? []);
-            $parsedData['languages'] = (array)($parsedData['languages'] ?? []);
+            $parsedData['skills'] = $parsedData['skills'] ?? '';
+            $parsedData['languages'] = $parsedData['languages'] ?? '';
             $parsedData['social_media_accounts'] = array_merge(
                 $defaultStructure['social_media_accounts'],
                 (array)($parsedData['social_media_accounts'] ?? [])
