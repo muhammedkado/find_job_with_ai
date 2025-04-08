@@ -111,4 +111,4 @@ This project is open-sourced software licensed under the [MIT license](https://o
 
 ## Contact
 
-For questions or support, please contact the project maintainer at [your-email@example.com].
+For questions or support, please contact the project maintainer at [mehmetkado9@gmail.com].
