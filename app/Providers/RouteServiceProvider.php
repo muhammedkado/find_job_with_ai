@@ -10,14 +10,7 @@ use Illuminate\Support\Facades\Route;
 
 class RouteServiceProvider extends ServiceProvider
 {
-    /**
-     * The path to your application's "home" route.
-     *
-     * Typically, users are redirected here after authentication.
-     *
-     * @var string
-     */
-    public const HOME = '/home';
+    public const HOME = '/';
 
     /**
      * Define your route model bindings, pattern filters, and other route configuration.
@@ -26,6 +19,12 @@ class RouteServiceProvider extends ServiceProvider
     {
         RateLimiter::for('api', function (Request $request) {
             return Limit::perMinute(60)->by($request->user()?->id ?: $request->ip());
+        });
+
+        // Every visitor shares a real Gemini/RapidAPI quota — keep any
+        // single IP from burning through the whole day's budget alone.
+        RateLimiter::for('ai', function (Request $request) {
+            return Limit::perHour(20)->by($request->ip());
         });
 
         $this->routes(function () {
@@ -37,13 +36,4 @@ class RouteServiceProvider extends ServiceProvider
                 ->group(base_path('routes/web.php'));
         });
     }
-
-
-    protected function configureRateLimiting()
-    {
-        RateLimiter::for('gemini-jobs', function ($request) {
-            return Limit::perMinute(120);
-        });
-    }
-
 }
