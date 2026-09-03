@@ -1,0 +1,49 @@
+{
+    "name": "Alex Rivera",
+    "birthday": null,
+    "position": "Senior Backend Developer",
+    "contact": {
+        "email": "alex.rivera@example.com",
+        "phone": "+1 555 010 2020",
+        "city": "Austin",
+        "country": "USA"
+    },
+    "summary": "Backend-focused full stack developer with 6 years building REST APIs and internal tools for logistics and fintech products.",
+    "education": {
+        "degree": "B.Sc. Computer Science",
+        "institution": "University of Texas",
+        "startingYear": "2014",
+        "graduationYear": "2018"
+    },
+    "experience": [
+        {
+            "position": "Senior Backend Developer",
+            "company": "Northline Logistics",
+            "start_date": "2021",
+            "end_date": "Present",
+            "description": "Own the shipment-tracking API (Laravel, PostgreSQL) serving 40k requests/min at peak.\nCut p95 latency by 60% by moving batch jobs to queued workers.\nMentor two junior developers and run the team's weekly code review."
+        },
+        {
+            "position": "Backend Developer",
+            "company": "Fintrust",
+            "start_date": "2018",
+            "end_date": "2021",
+            "description": "Built the payments reconciliation service (PHP, MySQL) used by the finance team daily.\nIntegrated three banking partner APIs with retry and idempotency handling."
+        }
+    ],
+    "internships": [],
+    "projects": [
+        {
+            "title": "Rate Limiter as a Service",
+            "description": "Small Redis-backed rate-limiting API extracted from an internal project and open-sourced.",
+            "technologies": "PHP, Redis, Laravel",
+            "duration": "3 months"
+        }
+    ],
+    "skills": "PHP, Laravel, MySQL, PostgreSQL, Redis, Docker, REST API design",
+    "languages": "English (native), Spanish (professional)",
+    "socialAccounts": {
+        "linkedin": "https://linkedin.com/in/alexrivera",
+        "github": "https://github.com/alexrivera"
+    }
+}

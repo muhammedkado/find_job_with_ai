@@ -2,311 +2,257 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Facades\Storage;
-use Smalot\PdfParser\Parser;
 use Amrachraf6699\LaravelGeminiAi\Facades\GeminiAi;
+use App\Services\DemoBudget;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Validator;
+use Smalot\PdfParser\Parser;
 
 class CVController extends Controller
 {
     public function analyze(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'cv' => 'required|file|mimes:pdf|max:2048',
+            'cv' => 'required_without:sample|file|mimes:pdf|max:2048',
+            'sample' => 'sometimes|boolean',
         ]);
 
         if ($validator->fails()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Invalid request parameters.',
-                'errors' => $validator->errors()
+                'errors' => $validator->errors(),
             ], 422);
         }
 
+        if ($request->boolean('sample')) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Loaded a sample CV.',
+                'data' => $this->sampleProfile(),
+            ]);
+        }
+
+        if (! DemoBudget::consumeGemini()) {
+            return response()->json([
+                'success' => true,
+                'message' => "Today's demo AI budget is used up — showing a sample profile instead.",
+                'data' => $this->sampleProfile(true),
+            ]);
+        }
+
         try {
-            $istest = $request->input('test');
-            if ($istest) {
-                $defaultStructure = [
-                    'name' => 'John Doe',
-                    'birthday' => '1990-01-01',
-                    'job_title' => 'Software Engineer',
-                    'summary' => 'Experienced software engineer with a strong background in developing scalable web applications.',
-                    'education' => [
-                        [
-                            'degree' => 'B.Sc. Computer Science',
-                            'institution' => 'University of Example',
-                            'graduationYear' => '2012'
-                        ]
-                    ],
-                    'experience' => [
-                        [
-                            'position' => 'Senior Software Engineer',
-                            'employer' => 'Tech Company',
-                            'dates' => '2015-2020',
-                            'description' => 'Developed and maintained web applications using PHP and Laravel.'
-                        ]
-                    ],
-                    'internships' => [
-                        [
-                            'position' => 'Software Engineering Intern',
-                            'employer' => 'Startup Inc.',
-                            'dates' => '2014',
-                            'description' => 'Assisted in the development of a mobile application.'
-                        ]
-                    ],
-                    'projects' => [
-                        [
-                            'name' => 'Project Alpha',
-                            'description' => 'A web application for managing tasks and projects.',
-                            'technologies' => 'PHP, Laravel, MySQL',
-                            'duration' => '6 months'
-                        ]
-                    ],
-                    'skills' => ['PHP', 'Laravel', 'JavaScript', 'MySQL'],
-                    'languages' => 'English, Spanish',
-                    'social_media_accounts' => [
-                        'linkedin' => 'https://linkedin.com/in/johndoe',
-                        'github' => 'https://github.com/johndoe'
-                    ]
-                ];
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Test completed successfully',
-                    'data' => $defaultStructure
-                ]);
-            } else {
-            // Process PDF file
             $path = $request->file('cv')->store('temp');
             $pdf = (new Parser())->parseFile(Storage::path($path));
             $cvContent = $pdf->getText();
             Storage::delete($path);
 
-            // Prepare structured prompt
-            $prompt = <<<PROMPT
-            Extract CV information exactly as written, returning ONLY a valid JSON object formatted as:
-
-            ```json
-            {
-                "name": "Full name as written",
-                "birthday": "Birth date or null",
-                "position": "Current/Main job title",
-                "contact": { email: '', phone: '', city: '', country: '' },
-                "summary": "Professional summary text or null",
-                "education": {
-                    "degree": "Degree name",
-                    "institution": "Institution name",
-                    "startingYear": "Starting year",
-                    "graduationYear": "Graduation year"
-                },
-                "experience": [
-                    {
-                        "position": "Job title verbatim",
-                        "company": "Company name exactly as written",
-                        "start_date": "Employment start date as specified",
-                        "end_date": "Employment finish date as specified (use 'Present' if currently employed)",
-                        "description": "Full job description with bullet points exactly as written"
-                    }
-                ]
-                "internships": ["Array of internship details"],
-                "projects": [
-                    {
-                        "title": "Exact project name as written",
-                        "description": "Full project description verbatim",
-                        "technologies": "Technologies listed exactly as shown",
-                        "duration": "Project duration as specified"
-                    }
-                ],
-                'skills': 'Comma-separated list of TECHNICAL SKILLS (e.g., Python, Git). Exclude category labels like "Languages:"',
-                "languages": string (list of languages with proficiency separated by commas),
-                "socialAccounts": {
-                    "linkedin": "URL or null",
-                    "github": "URL or null"
-                }
-            }
-Rules:
-Maintain original text exactly, especially for projects
-Preserve ALL project details verbatim
-- Include ALL job description bullet points exactly as written
-- Preserve bullet point characters (•, -, etc.) in descriptions
-- Maintain original line breaks in descriptions
-Education and Experience must be arrays even if single entry
-Include summary if exists, otherwise null
-Project name capitalization
-Punctuation in descriptions
-Technology names as written
-Duration formatting
-Use empty arrays if no projects exist
-Use empty arrays if no education/experience exists
-Never modify or rephrase project information
-Return ONLY the JSON without additional text
-CV Content:
-$cvContent
-PROMPT;
-            // Get Gemini response
-            $response = GeminiAi::generateText($prompt, [
-                'model' => 'gemini-1.5-pro',
-                'raw' => true,
+            $prompt = $this->extractionPrompt($cvContent);
+            $responseText = GeminiAi::generateText($prompt, [
+                'model' => config('gemini.models.text'),
                 'generationConfig' => [
                     'temperature' => 0.1,
-                    'maxOutputTokens' => 2000
-                ]
+                    'maxOutputTokens' => 2000,
+                ],
             ]);
 
-            // Validate response structure
-            if (!isset($response['candidates'][0]['content']['parts'][0]['text'])) {
-                throw new \Exception('Invalid response structure from Gemini API');
-            }
-
-            $responseText = $response['candidates'][0]['content']['parts'][0]['text'];
-
-            // Extract JSON from markdown code block
             if (preg_match('/```json\s*([\s\S]*?)\s*```/', $responseText, $matches)) {
                 $responseText = $matches[1];
             }
 
-            // Parse and validate JSON
             $parsedData = json_decode($responseText, true);
+
             if (json_last_error() !== JSON_ERROR_NONE) {
                 throw new \Exception('Invalid JSON response: ' . json_last_error_msg());
             }
 
-            // Normalize data structure
-            $defaultStructure = [
-                'name' => null,
-                'birthday' => null,
-                'position' => null,
-                'summary' => null,
-                'education' => null,
-                'experience' => [
-                    [
-                        'position' => null,
-                        'company' => null,
-                        "start_date"=> null,
-                        "end_date"=> null,
-                        'description' => null
-                    ]
-                ],
-                'internships' => [],
-                'projects' => [],
-                'skills' => null,
-                'languages' => null,
-                'socialAccounts' => [
-                    'linkedin' => null,
-                    'github' => null
-                ]
-            ];
-
-            // Merge with defaults and ensure correct types
-            $parsedData = array_merge($defaultStructure, $parsedData);
-            $parsedData['internships'] = (array)($parsedData['internships'] ?? []);
-            $parsedData['projects'] = (array)($parsedData['projects'] ?? []);
-            $parsedData['skills'] = $parsedData['skills'] ?? '';
-            $parsedData['languages'] = $parsedData['languages'] ?? '';
-            $parsedData['socialAccounts'] = array_merge(
-                $defaultStructure['socialAccounts'],
-                (array)($parsedData['socialAccounts'] ?? [])
-            );
+            $parsedData = $this->normalizeProfile($parsedData);
 
             return response()->json([
                 'success' => true,
                 'message' => 'Analysis completed successfully',
-                'data' => $parsedData
+                'data' => $parsedData,
             ]);
-        }
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
                 'message' => config('app.debug')
-                    ? "Analysis failed: " . $e->getMessage()
+                    ? 'Analysis failed: ' . $e->getMessage()
                     : 'Failed to process CV. Please try again.',
-                'errors' => config('app.debug') ? [
-                    'error' => $e->getMessage(),
-                    'trace' => $e->getTraceAsString()
-                ] : null
             ], 500);
         }
     }
+
     public function enhance(Request $request)
     {
         $validator = Validator::make($request->all(), [
             'text' => 'required|string|max:2000',
-            'section' => 'sometimes|string|in:experience,project,education,summary'
+            'section' => 'sometimes|string|in:experience,project,education,summary',
         ]);
 
         if ($validator->fails()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Invalid request parameters.',
-                'errors' => $validator->errors()
+                'errors' => $validator->errors(),
             ], 422);
         }
 
-        try {
-            $istest = $request->input('test');
-            $text = $request->input('text');
-            $section = $request->input('section', 'general');
-            if ($istest) {
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Test completed successfully',
-                    'data' => 'This is a test response'
-                ]);
-            } else {
-                // Context-aware enhancement prompts
-                $prompts = [
-                    'experience' => "Rewrite this work experience description to be more professional and impactful.
-                           Focus on achievements and measurable outcomes. Keep it concise (2 lines max). Text: ",
-                    'project' => "Rephrase this project description to highlight technical challenges and solutions.
-                        Use active voice and technical terminology. Keep it brief (2 lines). Text: ",
-                    'education' => "Enhance this education entry to emphasize relevant coursework and accomplishments.
-                          Maintain academic formal tone. 2 lines maximum. Text: ",
-                    'summary' => "Improve this professional summary to be more compelling and ATS-friendly.
-                        Focus on key qualifications and career highlights. Keep it to 2 strong lines. Text: ",
-                    'general' => "Rewrite the following text to be more professional and concise while maintaining meaning.
-                        Use formal business language and keep it to two short lines. Text: "
-                ];
+        $text = $request->input('text');
+        $section = $request->input('section', 'general');
 
-                $prompt = $prompts[$section] ?? $prompts['general'];
-                $fullPrompt = $prompt . "\n\n" . $text;
-
-                $response = GeminiAi::generateText($fullPrompt, [
-                    'model' => 'gemini-1.5-pro',
-                    'raw' => true,
-                    'generationConfig' => [
-                        'temperature' => 0.3,  // Lower temperature for more focused output
-                        'maxOutputTokens' => 100
-                    ]
-                ]);
-
-                $enhancedText = $response['candidates'][0]['content']['parts'][0]['text'] ?? null;
-                $enhancedText = trim($enhancedText ?? '');
-
-                // Ensure we get exactly 2 lines
-                $lines = preg_split('/\n+/', $enhancedText);
-                $formattedOutput = implode("\n", array_slice(array_filter(array_map('trim', $lines)), 0, 2));
-            }
-            return response()->json([
-                'success' => !empty($formattedOutput),
-                'message' => !empty($formattedOutput)
-                    ? 'Enhancement completed successfully'
-                    : 'Could not enhance the text',
-                'data' => !empty($formattedOutput) ? $formattedOutput : null
-            ]);
-        } catch (\Exception $e) {
-            $errorMessage = config('app.debug')
-                ? 'Enhancement Error: ' . $e->getMessage()
-                : 'Enhancement failed. Please try again.';
-
+        if (! DemoBudget::consumeGemini()) {
             return response()->json([
                 'success' => false,
-                'message' => $errorMessage,
-                'errors' => config('app.debug') ? [
-                    'exception' => get_class($e),
-                    'file' => $e->getFile(),
-                    'line' => $e->getLine()
-                ] : null
+                'message' => "Today's demo AI budget is used up — try again tomorrow.",
+                'demo_limited' => true,
+            ], 429);
+        }
+
+        try {
+            $prompts = [
+                'experience' => 'Rewrite this work experience description to be more professional and impactful. Focus on achievements and measurable outcomes. Keep it concise (2 lines max). Text: ',
+                'project' => 'Rephrase this project description to highlight technical challenges and solutions. Use active voice and technical terminology. Keep it brief (2 lines). Text: ',
+                'education' => 'Enhance this education entry to emphasize relevant coursework and accomplishments. Maintain academic formal tone. 2 lines maximum. Text: ',
+                'summary' => 'Improve this professional summary to be more compelling and ATS-friendly. Focus on key qualifications and career highlights. Keep it to 2 strong lines. Text: ',
+                'general' => 'Rewrite the following text to be more professional and concise while maintaining meaning. Use formal business language and keep it to two short lines. Text: ',
+            ];
+
+            $prompt = ($prompts[$section] ?? $prompts['general']) . "\n\n" . $text;
+
+            $enhancedText = trim(GeminiAi::generateText($prompt, [
+                'model' => config('gemini.models.text'),
+                'generationConfig' => [
+                    'temperature' => 0.3,
+                    'maxOutputTokens' => 100,
+                ],
+            ]));
+
+            $lines = preg_split('/\n+/', $enhancedText);
+            $formattedOutput = implode("\n", array_slice(array_filter(array_map('trim', $lines)), 0, 2));
+
+            return response()->json([
+                'success' => $formattedOutput !== '',
+                'message' => $formattedOutput !== '' ? 'Enhancement completed successfully' : 'Could not enhance the text',
+                'data' => $formattedOutput !== '' ? $formattedOutput : null,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => config('app.debug')
+                    ? 'Enhancement Error: ' . $e->getMessage()
+                    : 'Enhancement failed. Please try again.',
             ], 500);
         }
+    }
+
+    private function sampleProfile(bool $limited = false): array
+    {
+        $profile = json_decode(file_get_contents(resource_path('samples/profile.json')), true);
+        $profile['_sample'] = true;
+        $profile['_demo_limited'] = $limited;
+
+        return $profile;
+    }
+
+    private function normalizeProfile(array $parsedData): array
+    {
+        $defaultStructure = [
+            'name' => null,
+            'birthday' => null,
+            'position' => null,
+            'summary' => null,
+            'education' => null,
+            'experience' => [
+                [
+                    'position' => null,
+                    'company' => null,
+                    'start_date' => null,
+                    'end_date' => null,
+                    'description' => null,
+                ],
+            ],
+            'internships' => [],
+            'projects' => [],
+            'skills' => null,
+            'languages' => null,
+            'socialAccounts' => [
+                'linkedin' => null,
+                'github' => null,
+            ],
+        ];
+
+        $parsedData = array_merge($defaultStructure, $parsedData);
+        $parsedData['internships'] = (array) ($parsedData['internships'] ?? []);
+        $parsedData['projects'] = (array) ($parsedData['projects'] ?? []);
+        $parsedData['skills'] = $parsedData['skills'] ?? '';
+        $parsedData['languages'] = $parsedData['languages'] ?? '';
+        $parsedData['socialAccounts'] = array_merge(
+            $defaultStructure['socialAccounts'],
+            (array) ($parsedData['socialAccounts'] ?? [])
+        );
+
+        return $parsedData;
+    }
+
+    private function extractionPrompt(string $cvContent): string
+    {
+        return <<<PROMPT
+        Extract CV information exactly as written, returning ONLY a valid JSON object formatted as:
+
+        ```json
+        {
+            "name": "Full name as written",
+            "birthday": "Birth date or null",
+            "position": "Current/Main job title",
+            "contact": { "email": "", "phone": "", "city": "", "country": "" },
+            "summary": "Professional summary text or null",
+            "education": {
+                "degree": "Degree name",
+                "institution": "Institution name",
+                "startingYear": "Starting year",
+                "graduationYear": "Graduation year"
+            },
+            "experience": [
+                {
+                    "position": "Job title verbatim",
+                    "company": "Company name exactly as written",
+                    "start_date": "Employment start date as specified",
+                    "end_date": "Employment finish date as specified (use 'Present' if currently employed)",
+                    "description": "Full job description with bullet points exactly as written"
+                }
+            ],
+            "internships": ["Array of internship details"],
+            "projects": [
+                {
+                    "title": "Exact project name as written",
+                    "description": "Full project description verbatim",
+                    "technologies": "Technologies listed exactly as shown",
+                    "duration": "Project duration as specified"
+                }
+            ],
+            "skills": "Comma-separated list of TECHNICAL SKILLS (e.g., Python, Git). Exclude category labels like 'Languages:'",
+            "languages": "list of languages with proficiency separated by commas",
+            "socialAccounts": {
+                "linkedin": "URL or null",
+                "github": "URL or null"
+            }
+        }
+        ```
+
+        Rules:
+        - Maintain original text exactly, especially for projects
+        - Preserve ALL project details verbatim
+        - Include ALL job description bullet points exactly as written
+        - Preserve bullet point characters (•, -, etc.) in descriptions
+        - Education and Experience must be arrays even if a single entry
+        - Use empty arrays if no projects/education/experience exist
+        - Never modify or rephrase project information
+        - Return ONLY the JSON without additional text
+
+        CV Content:
+        {$cvContent}
+        PROMPT;
     }
 }

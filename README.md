@@ -1,114 +1,84 @@
 # Find Job with AI
 
-This project is a Laravel-based web application that leverages AI to assist users in finding jobs and analyzing their CVs. It integrates with external APIs and AI models to provide job recommendations, CV analysis, and text enhancement.
+Upload a CV, get it parsed into a structured profile by Gemini, edit it, then see it scored against real job postings pulled from the JSearch API.
 
-## Features
+## Live demo
 
-- **Job Search**: Search for jobs using the JSearch API with filters like position, country, and date posted.
-- **CV Analysis**: Upload a CV in PDF format to extract structured information such as skills, experience, and education.
-- **Job Compatibility Analysis**: Match candidate profiles with job descriptions and calculate compatibility scores using AI.
-- **Text Enhancement**: Improve CV sections (e.g., experience, projects, education) with AI-powered rewriting.
-- **Test Mode**: Simulate API responses for testing purposes.
+**https://findjob.mkado.dev**
 
-## Installation
+No account needed. Click "Try with sample CV" for a zero-cost walkthrough, or upload a real PDF to see the actual Gemini parsing. Both Gemini and job-search calls share a daily budget across every visitor — once it's used up for the day, the app automatically falls back to sample data instead of erroring out.
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/your-username/find-job-with-ai.git
-   cd find-job-with-ai
-   ```
+## How it works
 
-2. Install dependencies:
-   ```bash
-   composer install
-   npm install
-   ```
+1. **Upload** — a PDF is parsed locally (`smalot/pdfparser`), then Gemini extracts a structured profile (name, experience, skills, projects, ...). The file itself is never stored.
+2. **Profile** — the parsed profile is fully editable. Each experience/project/summary field has an "Enhance with AI" button that rewrites it via Gemini.
+3. **Matches** — your skills and experience are sent along with live job postings (JSearch API) to Gemini, which scores each posting's compatibility and explains why.
 
-3. Copy the `.env.example` file to `.env` and configure your environment variables:
-   ```bash
-   cp .env.example .env
-   ```
+## Tech stack
 
-4. Generate the application key:
-   ```bash
-   php artisan key:generate
-   ```
+- Laravel 10, SQLite (no real persistence needed — this app is stateless)
+- [Gemini API](https://aistudio.google.com/apikey) via `amrachraf6699/laravel-gemini-ai`
+- [JSearch API](https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch) (RapidAPI) for live job postings — optional, falls back to sample jobs if unset
+- Blade + [Alpine.js](https://alpinejs.dev) + Tailwind CSS v4 (built with Vite) — no SPA framework, no separate JSON API
 
-5. Set up your database and run migrations:
-   ```bash
-   php artisan migrate
-   ```
+## Local setup
 
-6. Configure the following API keys in your `.env` file:
-   - `RAPIDAPI_KEY`: Your API key for the JSearch API.
-   - `GEMINI_AI_API_KEY`: Your API key for the Gemini AI service.
-
-7. Start the development server:
-   ```bash
-   php artisan serve
-   ```
-
-8. Compile frontend assets:
-   ```bash
-   npm run dev
-   ```
-
-## API Endpoints
-
-### Job Search
-
-- **Endpoint**: `/api/jobs/search`
-- **Method**: `GET`
-- **Parameters**:
-  - `position` (optional): Job position to search for.
-  - `country` (optional): Country code (e.g., `us`, `jo`).
-  - `page` (optional): Page number.
-  - `num_pages` (optional): Number of pages to fetch.
-  - `date_posted` (optional): Filter by date posted (`all`, `last_7_days`, etc.).
-
-### CV Analysis
-
-- **Endpoint**: `/api/cv/analyze`
-- **Method**: `POST`
-- **Parameters**:
-  - `cv` (required): PDF file of the CV.
-
-### Text Enhancement
-
-- **Endpoint**: `/api/cv/enhance`
-- **Method**: `POST`
-- **Parameters**:
-  - `text` (required): Text to enhance.
-  - `section` (optional): Section type (`experience`, `project`, `education`, `summary`).
-
-## Technologies Used
-
-- **Backend**: Laravel
-- **Frontend**: Blade templates, Vite
-- **AI Integration**: Gemini AI
-- **APIs**: JSearch API
-- **PDF Parsing**: Smalot PDF Parser
-
-## Testing
-
-Run the test suite using PHPUnit:
-```bash
-php artisan test
+```sh
+git clone https://github.com/muhammedkado/find_job_with_ai.git
+cd find_job_with_ai
+composer install
+npm install
+cp .env.example .env
+php artisan key:generate
 ```
 
-## Contributing
+`.env.example` defaults to SQLite — no database server needed:
 
-Contributions are welcome! Please follow these steps:
+```sh
+touch database/database.sqlite
+php artisan migrate
+```
 
-1. Fork the repository.
-2. Create a new branch for your feature or bugfix.
-3. Commit your changes and push to your fork.
-4. Submit a pull request.
+Add your keys to `.env` (both optional — the app works with neither, using sample data throughout):
+
+```
+GEMINI_API_KEY=      # https://aistudio.google.com/apikey
+RAPIDAPI_KEY=         # https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch
+```
+
+Run it:
+
+```sh
+npm run build   # or `npm run dev` while working on the frontend
+php artisan serve
+```
+
+## Endpoints
+
+The wizard talks to itself over these session-based (CSRF-protected) routes — this isn't a public JSON API:
+
+| Route | What it does |
+|---|---|
+| `POST /wizard/upload-cv` | `{cv: <file>}` or `{sample: true}` → parsed profile |
+| `POST /wizard/enhance` | `{text, section}` → AI-rewritten text |
+| `POST /wizard/jobs` | candidate profile → scored job matches (or sample matches) |
+| `GET /wizard/jobsearch` | raw JSearch passthrough (or sample jobs) |
+
+## Demo-safety design
+
+This app calls two paid APIs from public, unauthenticated endpoints, so it's built to fail safe rather than fail expensive:
+
+- **Shared daily budget** (`app/Services/DemoBudget.php`) — a simple date-keyed cache counter caps total Gemini and JSearch calls per day (`DEMO_GEMINI_DAILY_BUDGET` / `DEMO_JSEARCH_DAILY_BUDGET`). Once spent, requests get sample data instead of a paid API call.
+- **Per-IP throttle** (`throttle:ai` in `RouteServiceProvider`) — on top of the shared budget, one IP can't burn through the whole day's quota alone.
+- **"Try with sample CV" and job-search-without-a-key both cost nothing** — they never touch Gemini or JSearch, so the demo is fully explorable even with a $0 budget.
+- **JSearch responses are cached 24h** per query, so repeated searches don't re-spend the budget.
+
+## Notes on the code
+
+This app previously had no frontend at all (the root route rendered Laravel's stock welcome page while `find_job_with_ai`'s actual features were three unauthenticated JSON endpoints), a hardcoded `gemini-1.5-pro` model reference, a rate limiter that was defined but never wired up, and a bug in the enhance endpoint that treated a plain string API response as an array. All of that is fixed here; see `app/Http/Controllers/CVController.php` and `JobSearchController.php`.
+
+**Laravel version note:** this app runs on Laravel 10, which is past its security-support window — `composer audit` currently reports advisories against the framework itself with no 10.x patch available (fixed only in 12.60+/13.x). A framework upgrade is recommended before this handles meaningful traffic; it wasn't done here to avoid an unreviewed, high-risk major-version bump alongside this rebuild.
 
 ## License
 
-This project is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
-
-## Contact
-
-For questions or support, please contact the project maintainer at [mehmetkado9@gmail.com].
+MIT.
