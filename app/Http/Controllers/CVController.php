@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Amrachraf6699\LaravelGeminiAi\Facades\GeminiAi;
 use App\Services\DemoBudget;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Smalot\PdfParser\Parser;
@@ -53,7 +54,11 @@ class CVController extends Controller
                 'model' => config('gemini.models.text'),
                 'generationConfig' => [
                     'temperature' => 0.1,
-                    'maxOutputTokens' => 2000,
+                    'maxOutputTokens' => 4000,
+                    // Gemini 2.5 models think by default and the thoughts come out of
+                    // maxOutputTokens: on a real CV they ate 1916 of 2000 tokens and the
+                    // JSON came back truncated. These calls want an answer, not reasoning.
+                    'thinkingConfig' => ['thinkingBudget' => 0],
                 ],
             ]);
 
@@ -75,6 +80,9 @@ class CVController extends Controller
                 'data' => $parsedData,
             ]);
         } catch (\Exception $e) {
+            // Without this the only trace of a failure was the generic message below.
+            Log::error('Gemini call failed', ['action' => __FUNCTION__, 'error' => $e->getMessage()]);
+
             return response()->json([
                 'success' => false,
                 'message' => config('app.debug')
@@ -125,7 +133,11 @@ class CVController extends Controller
                 'model' => config('gemini.models.text'),
                 'generationConfig' => [
                     'temperature' => 0.3,
-                    'maxOutputTokens' => 100,
+                    'maxOutputTokens' => 200,
+                    // Gemini 2.5 models think by default and the thoughts come out of
+                    // maxOutputTokens: on a real CV they ate 1916 of 2000 tokens and the
+                    // JSON came back truncated. These calls want an answer, not reasoning.
+                    'thinkingConfig' => ['thinkingBudget' => 0],
                 ],
             ]));
 
@@ -138,6 +150,9 @@ class CVController extends Controller
                 'data' => $formattedOutput !== '' ? $formattedOutput : null,
             ]);
         } catch (\Exception $e) {
+            // Without this the only trace of a failure was the generic message below.
+            Log::error('Gemini call failed', ['action' => __FUNCTION__, 'error' => $e->getMessage()]);
+
             return response()->json([
                 'success' => false,
                 'message' => config('app.debug')

@@ -118,7 +118,11 @@ class JobSearchController extends Controller
                 'model' => config('gemini.models.text'),
                 'generationConfig' => [
                     'temperature' => 0.2,
-                    'maxOutputTokens' => 4000,
+                    'maxOutputTokens' => 6000,
+                    // Gemini 2.5 models think by default and the thoughts come out of
+                    // maxOutputTokens: on a real CV they ate 1916 of 2000 tokens and the
+                    // JSON came back truncated. These calls want an answer, not reasoning.
+                    'thinkingConfig' => ['thinkingBudget' => 0],
                 ],
             ]);
 
