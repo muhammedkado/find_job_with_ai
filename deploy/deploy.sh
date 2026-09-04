@@ -1,25 +1,23 @@
 #!/usr/bin/env bash
-# Deploy/update this app at /var/www/findjob on the VPS. Run as the `deploy` user.
+# Find Job with AI — server-side deploy step.
 #
-# This only pulls PHP code — the built frontend (public/build) is produced
-# locally with `npm run build` and uploaded separately, e.g.:
-#   rsync -av public/build/ deploy@findjob.mkado.dev:/var/www/findjob/public/build/
+# Runs ON the server as `ubuntu`, after `git push server HEAD:demo-deploy`
+# from the workstation has checked the branch out in /var/www/findjob
+# (the repo has receive.denyCurrentBranch=updateInstead). Driven by deploy.sh
+# in the mkado-dev workspace:
+#     ./deploy.sh findjob            # backend only
+#     ./deploy.sh findjob --assets   # also rebuild public/build (Vite) on the workstation and upload it
+# The server has no Node, so public/build is built locally and uploaded by the
+# wrapper; it is gitignored and left alone here.
+# Never creates or edits .env or database/database.sqlite (the demo data).
 set -euo pipefail
 cd /var/www/findjob
-
-git pull origin demo-deploy
-composer install --no-dev --optimize-autoloader --no-interaction
-
-if [ ! -f .env ]; then
-    cp .env.production.example .env
-    php artisan key:generate --force
-fi
-
+[ -f .env ] || { echo "!! /var/www/findjob/.env is missing; this script never creates it" >&2; exit 1; }
+composer install --optimize-autoloader --no-interaction --no-progress --quiet
 touch database/database.sqlite
-php artisan migrate --force
+php artisan migrate --force --no-interaction
 php artisan config:cache
-php artisan route:cache
+php artisan route:cache || php artisan route:clear
 php artisan view:cache
-
 sudo systemctl reload php8.3-fpm
-echo "Find Job with AI deployed. Remember to rsync public/build/ if the frontend changed."
+echo "findjob: live at $(git rev-parse --short HEAD) — $(git log -1 --format=%s | cut -c1-70)"
