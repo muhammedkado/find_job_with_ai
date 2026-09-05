@@ -16,7 +16,7 @@ No account needed. Click "Try with sample CV" for a zero-cost walkthrough, or up
 
 ## Tech stack
 
-- Laravel 10, SQLite (no real persistence needed — this app is stateless)
+- Laravel 12, SQLite (no real persistence needed — this app is stateless)
 - [Gemini API](https://aistudio.google.com/apikey) via `amrachraf6699/laravel-gemini-ai`
 - [JSearch API](https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch) (RapidAPI) for live job postings — optional, falls back to sample jobs if unset
 - Blade + [Alpine.js](https://alpinejs.dev) + Tailwind CSS v4 (built with Vite) — no SPA framework, no separate JSON API
@@ -77,7 +77,7 @@ This app calls two paid APIs from public, unauthenticated endpoints, so it's bui
 
 This app previously had no frontend at all (the root route rendered Laravel's stock welcome page while `find_job_with_ai`'s actual features were three unauthenticated JSON endpoints), a hardcoded `gemini-1.5-pro` model reference, a rate limiter that was defined but never wired up, and a bug in the enhance endpoint that treated a plain string API response as an array. All of that is fixed here; see `app/Http/Controllers/CVController.php` and `JobSearchController.php`.
 
-**Laravel version note:** this app runs on Laravel 10, which is past its security-support window — `composer audit` currently reports advisories against the framework itself with no 10.x patch available (fixed only in 12.60+/13.x). A framework upgrade is recommended before this handles meaningful traffic; it wasn't done here to avoid an unreviewed, high-risk major-version bump alongside this rebuild.
+**Laravel version note:** this app runs on Laravel 12, which is past its security-support window — `composer audit` currently reports advisories against the framework itself with no 10.x patch available (fixed only in 12.60+/13.x). A framework upgrade is recommended before this handles meaningful traffic; it wasn't done here to avoid an unreviewed, high-risk major-version bump alongside this rebuild.
 
 ## License
 
