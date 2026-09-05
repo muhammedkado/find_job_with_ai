@@ -1,0 +1,41 @@
+# Lint, boot check and front-end build on every push. No deploy from CI: the
+# demo server pulls nothing from GitHub (deploys go over SSH from the workstation).
+name: ci
+
+on:
+  push:
+    branches: [main, demo-deploy]
+  pull_request:
+
+jobs:
+  php:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, intl, pdo_sqlite, gd
+          coverage: none
+      - run: composer validate --strict --no-check-publish
+      - run: composer install --no-interaction --no-progress --prefer-dist --no-scripts
+      - name: Syntax check (fails on the first file with an error)
+        run: find app routes config database -name '*.php' -print0 | xargs -0 -n1 -P4 php -l >/dev/null
+      - name: Application boots and migrates (SQLite, no API keys)
+        run: |
+          cp .env.example .env
+          php artisan key:generate --force -q
+          touch database/database.sqlite
+          php artisan migrate --force -q
+          php artisan route:list --compact
+
+  assets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build

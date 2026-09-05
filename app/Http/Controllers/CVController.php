@@ -43,11 +43,19 @@ class CVController extends Controller
             ]);
         }
 
+        // Uploads only live long enough to be read. Anything older than a day in
+        // temp/ is a leftover from a crash, so sweep it here rather than with a
+        // scheduler the demo server does not run.
+        foreach (Storage::files('temp') as $stale) {
+            if (Storage::lastModified($stale) < now()->subDay()->getTimestamp()) {
+                Storage::delete($stale);
+            }
+        }
+
+        $path = null;
         try {
             $path = $request->file('cv')->store('temp');
-            $pdf = (new Parser())->parseFile(Storage::path($path));
-            $cvContent = $pdf->getText();
-            Storage::delete($path);
+            $cvContent = (new Parser())->parseFile(Storage::path($path))->getText();
 
             $prompt = $this->extractionPrompt($cvContent);
             $responseText = GeminiAi::generateText($prompt, [
@@ -89,6 +97,12 @@ class CVController extends Controller
                     ? 'Analysis failed: ' . $e->getMessage()
                     : 'Failed to process CV. Please try again.',
             ], 500);
+        } finally {
+            // The delete used to sit inside the try, after parsing: a parser
+            // exception left the PDF on disk. Now it goes regardless.
+            if ($path !== null) {
+                Storage::delete($path);
+            }
         }
     }
 
