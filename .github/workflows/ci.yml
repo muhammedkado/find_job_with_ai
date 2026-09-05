@@ -22,6 +22,9 @@ jobs:
       - name: Syntax check (fails on the first file with an error)
         run: find app routes config database -name '*.php' -print0 | xargs -0 -n1 -P4 php -l >/dev/null
       - name: Application boots and migrates (SQLite, no API keys)
+        env:
+          DB_CONNECTION: sqlite
+          DB_DATABASE: database/database.sqlite
         run: |
           cp .env.example .env
           php artisan key:generate --force -q
