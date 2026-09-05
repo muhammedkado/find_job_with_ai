@@ -30,7 +30,7 @@ jobs:
           php artisan key:generate --force -q
           touch database/database.sqlite
           php artisan migrate --force -q
-          php artisan route:list --compact
+          php artisan route:list --except-vendor >/dev/null && echo "routes resolve"
 
   assets:
     runs-on: ubuntu-latest
